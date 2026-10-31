@@ -8,7 +8,7 @@
 | 编写日期 | 2026-10-31 |
 | 文档状态 | 待评审 |
 | 上游文档 | `0-系统汇总prd.md` |
-| 关联文档 | `4-生图任务与结果prd.md`、`6-管理后台-账号与权限prd.md`、`7-管理后台-用户与生图记录prd.md`、`9-后端服务与接口prd.md` |
+| 关联文档 | `4-生图任务与结果/4-生图任务与结果prd.md`、`6-管理后台-账号与权限/6-管理后台-账号与权限prd.md`、`7-管理后台-用户与生图记录prd.md`、`9-后端服务与接口prd.md` |
 | 术语依据 | `GLOSSARY.md` |
 
 ---
@@ -726,7 +726,7 @@ templates / material_assets / size_presets（被批次快照引用或独立配�
 
 ## 11. 权限点清单
 
-与 `6-管理后台-账号与权限prd.md` 第 11 章一致，数据库种子需包含：
+与 `6-管理后台-账号与权限/6-管理后台-账号与权限prd.md` 第 11 章一致，数据库种子需包含：
 
 - 用户端：`user.workspace`、`user.generate`、`user.history`、`user.profile`
 - 管理端菜单：`admin.dashboard.view`、`admin.accounts.view`、`admin.roles.view`、`admin.content.view`、`admin.assets.view`、`admin.prompts.view`、`admin.model.view`、`admin.tokens.view`、`admin.audit.view`
