@@ -714,3 +714,76 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 - rebase 后全量 `pytest` **59 passed**；`git push --force-with-lease origin feat/workspace-backend-demo` 成功。
 - `git merge --ff-only feat/workspace-backend-demo` 合并到 `main`，推送 `a476ac4..7595e31` 成功（GitHub 443 直连超时，使用 `git -c http.curloptResolve=github.com:443:140.82.112.3` 临时固定 IP）。
 - 未提交 `backend/.env`、`backend/storage/`、`backend/.curl_tmp/` 等本地文件（均已在 `.gitignore`）。
+
+## 2026-10-31 会话 14：10 号数据模型与存储最小 demo 文档
+
+### 目录与引用
+
+- `git mv docs/prd/10-数据模型与存储prd.md docs/prd/10-数据模型与存储/10-数据模型与存储prd.md`。
+- 新建 `docs/prd/10-数据模型与存储/issues/`。
+- 更新 `docs/prd/0-系统汇总prd.md` 两处路径为 `10-数据模型与存储/10-数据模型与存储prd.md`。
+- 更新 `docs/prd/11-部署与运维prd.md` 关联文档路径。
+- 更新 `docs/prd/7-管理后台-用户与生图记录/接口文档-用户与生图记录最小demo.md` 的 `../10-...` 相对路径。
+
+### 新增文件
+
+- `docs/prd/10-数据模型与存储/README.md`
+- `docs/prd/10-数据模型与存储/issues/01-迁移骨架与身份审计表.md`
+- `docs/prd/10-数据模型与存储/issues/02-内容域六表与数据约束.md`
+- `docs/prd/10-数据模型与存储/issues/03-配置域六表幂等种子与初始超管.md`
+- `docs/prd/10-数据模型与存储/issues/04-会话消息与Agent调用数据链路.md`
+- `docs/prd/10-数据模型与存储/issues/05-生成批次与图片数据链路.md`
+- `docs/prd/10-数据模型与存储/issues/06-上传图与对象存储路径.md`
+- `docs/prd/10-数据模型与存储/issues/07-五年归档与归档读取.md`
+- `docs/prd/10-数据模型与存储/issues/08-数据底座验收与契约回归.md`
+- `docs/prd/10-数据模型与存储/接口文档-数据模型与存储最小demo.md`
+
+### 内容要点
+
+- README：最小范围、做/不做、相对 PRD 取舍、环境前置、契约总览、依赖图、13 步验收脚本、10 号 §12 覆盖表、17 项待确认。
+- 接口文档：18 张表字段与约束、枚举、迁移与 schema 校验、种子清单与幂等规则、首个超管、脱敏、存储适配器操作与路径、归档算法与读取降级、验收命令、16 项待确认。
+- 未运行代码或测试；未 commit；未创建 GitHub issue。
+
+### 验证命令
+
+- 仅使用 `find`、`grep`、`git mv`、`git status` 类只读/文件操作；未执行迁移、种子或回归。
+
+## 2026-10-31 会话 15：11 号部署与运维最小 demo 文档
+
+### 目录与引用
+
+- `git mv docs/prd/11-部署与运维prd.md docs/prd/11-部署与运维/11-部署与运维prd.md`。
+- 新建 `docs/prd/11-部署与运维/issues/`。
+- 更新 `docs/prd/0-系统汇总prd.md` 索引为 `11-部署与运维/11-部署与运维prd.md`。
+- 更新 `docs/prd/9-后端服务与接口/9-后端服务与接口prd.md` 关联文档为 `10-数据模型与存储/10-数据模型与存储prd.md`、`11-部署与运维/11-部署与运维prd.md`。
+- 更新移动后 `11-部署与运维prd.md` 头部引用为 `../0-系统汇总prd.md`、`../9-后端服务与接口/...`、`../10-数据模型与存储/...`、`../../GLOSSARY.md`。
+- 更新 `docs/prd/10-数据模型与存储/接口文档-数据模型与存储最小demo.md` 的上游引用为 `../11-部署与运维/11-部署与运维prd.md`。
+
+### 新增文件
+
+- `docs/prd/11-部署与运维/README.md`
+- `docs/prd/11-部署与运维/issues/01-Compose基线与依赖服务.md`
+- `docs/prd/11-部署与运维/issues/02-迁移种子与初始超管.md`
+- `docs/prd/11-部署与运维/issues/03-应用镜像与双健康探针.md`
+- `docs/prd/11-部署与运维/issues/04-Nginx网关与SSE代理.md`
+- `docs/prd/11-部署与运维/issues/05-结构化日志与request_id.md`
+- `docs/prd/11-部署与运维/issues/06-备份与恢复.md`
+- `docs/prd/11-部署与运维/issues/07-Worker-Beat基线.md`
+- `docs/prd/11-部署与运维/issues/08-一键启动与验收脚本.md`
+- `docs/prd/11-部署与运维/接口文档-部署与运维最小demo.md`
+
+### 内容要点
+
+- README：最小范围、做/不做、相对 PRD 取舍、前置与演示配置、接口总览、依赖图、16 步验收脚本、11 号 §14 覆盖表、14 项待确认、快速开始/日常更新/排障。
+- 接口文档：`GET /api/health` 裸结构、`GET /api/v1/health` 统一响应、演示 SSE 探针、Nginx 路由/SSE/413/安全头/文档内网限制、Compose 服务/网络/卷/环境变量/启动顺序、6 个运维脚本 CLI、cron 与 Celery 契约、日志与 `request_id`、错误码与退出码、验收矩阵、14 项待确认。
+- 用户确认的取舍：8 个切片；只起 Worker/Beat、不做归档；健康接口双路径；移动 PRD 并更新引用。
+- 明确不做：5 年归档、孤儿上传清理、导出清理、权限缓存刷新、审计业务写入、HTTPS/443、MinIO 控制台、Prometheus/Grafana、多机/灰度/容灾、业务页面与接口。
+- 演示专用：`/api/v1/sessions/_probe/stream`、`ops.selftest`，仅非生产启用，已列待确认。
+
+### 验证命令
+
+- `find "docs/prd/11-部署与运维" -type f`：确认 11 个文件（PRD、README、8 issues、接口文档）。
+- `grep -o "issues/[^)]*" docs/prd/11-部署与运维/README.md`：确认 8 个 issue 链接与文件名一致。
+- `grep -rn "11-部署与运维prd.md" docs --include=*.md`：确认无旧顶层路径残留（文件夹内裸文件名与 `./` 链接属正常）。
+- `git status --short`：提交前确认移动为 rename、新增文件为 untracked，提交后已全部纳入；未执行代码、迁移、种子或回归。
+- 文档生成时未提交；随后提交到 `docs/deploy-ops-minimal-demo` 并合并 `main`；未创建 GitHub issue。
