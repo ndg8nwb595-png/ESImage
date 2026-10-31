@@ -106,9 +106,12 @@ def test_request_id_reuse(client):
 
 
 def test_request_id_invalid_regenerated(client):
-    resp = client.get("/api/health", headers={"X-Request-ID": "bad id!超长超长超长超长超长超长超长超长"})
+    # 非法值必须使用 ASCII：HTTP 头按 ascii 编码，中文会先触发 UnicodeEncodeError；
+    # 空格与感叹号均不符合 ^[A-Za-z0-9_-]{8,64}$，仍能覆盖“非法则重新生成”的分支。
+    invalid_id = "bad id!"
+    resp = client.get("/api/health", headers={"X-Request-ID": invalid_id})
     rid = resp.headers["x-request-id"]
-    assert rid != "bad id!超长超长超长超长超长超长超长超长"
+    assert rid != invalid_id
     assert _valid_request_id(rid)
 
 
@@ -183,10 +186,9 @@ def test_validate_initial_admin_rejects(monkeypatch, username, password):
 # ---------------------------------------------------------------------------
 # ops.selftest（纯函数，不依赖 Redis/Celery 运行时）
 # ---------------------------------------------------------------------------
-def test_selftest_pure(monkeypatch):
+def test_selftest_pure():
     from app.tasks import ops as ops_tasks
 
-    monkeypatch.setattr(ops_tasks, "delay_ms", 0)
     token = request_id_var.set("req-before")
     try:
         result = ops_tasks.selftest(request_id="rid-1", delay_ms=1)
