@@ -1,5 +1,6 @@
 import { Navigate, createBrowserRouter } from 'react-router-dom'
 
+import AccountsPage from '@/modules/admin/pages/AccountsPage'
 import AdminDashboardPage from '@/modules/admin/pages/DashboardPage'
 import ForbiddenPage from '@/modules/errors/pages/ForbiddenPage'
 import NotFoundPage from '@/modules/errors/pages/NotFoundPage'
@@ -57,6 +58,14 @@ export const router = createBrowserRouter([
             element: (
               <RequirePermission permission="admin.dashboard.view">
                 <AdminDashboardPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/admin/accounts',
+            element: (
+              <RequirePermission permission="admin.accounts.view">
+                <AccountsPage />
               </RequirePermission>
             ),
           },
