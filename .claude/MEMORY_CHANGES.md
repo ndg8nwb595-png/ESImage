@@ -1159,9 +1159,9 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 
 ### 六、提交状态
 
-- 已在 `feat/minio-storage-local` 提交：提交信息 `feat: 接入 MinIO 统一存储门面`（amend 后具体 hash 以 `git log` 为准）。
-- 未 push/merge，等待用户确认。
-- Postgres 卷切换事故仍待用户裁决（见第三节）。
+- 已提交并推送 `feat/minio-storage-local` 与 `main`，远端均为 `a21dc5a`（含功能提交、合并提交与文档提交）。
+- `main` 通过 `--ff-only` 从 `3878e33` 快进到 `a21dc5a`。
+- Postgres 已按方案 C 恢复（见第七节）。
 
 ### 七、合并最新 main 与 Postgres 恢复（2026-11-01）
 

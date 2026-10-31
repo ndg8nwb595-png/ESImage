@@ -346,7 +346,7 @@
 | 自动化测试 | 完成 | 13 个存储单元测试 + 2 个真实 MinIO 集成测试通过；全量仅 2 个既有 `test_ops` 失败 |
 | 端到端验证 | 完成 | 真实 MinIO：登录→上传→原图→缩略图→`/api/health`；对象落在 `uploads/`、`thumbnails/` |
 | 待用户裁决 | 已裁决 | 用户选择方案 C：旧卷 `esimage_esimage_pgdata` 复制到新卷 `esimage_pgdata`，旧卷保留；库内 18 张表、4 个用户 |
-| 提交/合并 | 进行中 | 已提交并合并 `origin/main`；待 push 分支与 `main` |
+| 提交/合并 | 完成 | 已推送 `feat/minio-storage-local`；`main` 以 `--ff-only` 从 `3878e33` 快进到 `a21dc5a` 并推送 |
 | 独立审查修复 | 完成 | 本地 FileResponse 兼容、async 上传线程池、compose 存储配置、脚本本地隔离、StorageError 全局映射、端口绑定、响应关闭测试 |
 | MinIO Range/ETag | 已知取舍 | MinIO 后端使用缓冲 Response，不支持 Range；本地后端保持原 FileResponse 行为 |
 | 归档超时连接池 | 待后续 | MinIO SDK 默认超时/重试较长；极端卡顿可能占用连接池，后续可配置短超时 PoolManager |

@@ -307,4 +307,4 @@
 - 状态：已提交（提交信息 `feat: 接入 MinIO 统一存储门面`，hash 以 `git log` 为准）。
 - 用户选择 Postgres 恢复方案 C 并同意 push/merge：已把旧卷 `esimage_esimage_pgdata` 复制到新卷 `esimage_pgdata`，容器恢复 healthy，库内 18 张表、4 个用户；旧卷保留。
 - 已合并 `origin/main`（`3878e33`，8 号聊天记录）；冲突仅在记忆需求表与 `backend/.env.example`，保留双方内容，并为本地 `.env` 补充 `MODEL_CONFIG_ENCRYPTION_KEY`。合并后全量测试仍仅 2 个既有 `test_ops` 失败。
-- 下一步：推送功能分支并快进合并 `main`。
+- 已完成：推送 `feat/minio-storage-local`，并以 `--ff-only` 将 `main` 从 `3878e33` 快进到 `a21dc5a` 后推送；远端两个分支指向同一提交。
