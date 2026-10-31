@@ -129,3 +129,22 @@
 - **移动 PRD 后按文件所在层级校验引用**：顶层 0 号用 `11-部署与运维/...`，文件夹内文档用 `./` 或 `../`；同名字符串在不同层级对错不同，不能只 grep 旧名。
 - **部署 demo 的“接口文档”要包含非 HTTP 契约**：健康探针只是其一，Compose 服务/端口/卷、脚本 CLI 参数与退出码、cron/Celery 调度、日志字段与 `request_id` 同样是与运维的接口，缺少会无法验收。
 - **演示专用接口必须带环境开关并写明**：SSE 探针与 `ops.selftest` 不在 PRD 中，需仅非生产启用、生产 404/不注册，并在 README 与接口文档的待确认项中标注，避免被当成正式接口。
+- **FastAPI 路由返回类型不能写 `FileResponse | Response`**：Pydantic 无法为 Starlette Response 的联合类型生成模型，启动即 `FastAPIError`；统一注解为 `Response`（两个类都是其子类）。
+- **历史列表分页要在 SQL 里先聚合再分页**：先按 `batch_id` 统计历史可见图片数并 `GROUP BY`，再 join 批次表取 total/items；不要先分页再逐批查张数，否则 N+1。
+- **封面按“最小序号”而不是图片 ID**：同一批次 6 张图的 ID 与序号通常一致，但重生成会产生新 attempt；按 `index_no ASC, attempt_no DESC, id DESC` 取第一张才稳定。
+- **归档缩略图永远不要跟着去 `archive/`**：缩略图留在 `thumbnails/` 热存，只有原图预览/下载/ZIP 走归档路径；否则归档后列表封面全部变慢。
+- **ZIP manifest 选行规则要先定再写**：同一 `index_no` 可能有 superseded 旧图和多次 attempt；取 `attempt_no` 最大且非 superseded，失败行才能准确对应“最后一次尝试”。
+- **ZIP 不能边流边发现缺文件**：先把所有成功图读校验完，再构建 ZIP；任一文件不可用整体返回 30014，避免客户端收到残缺包。
+- **Windows 下 heredoc 里的中文 Python 会按 GBK 解码**：内联脚本用 `export PYTHONUTF8=1` + `PYTHONIOENCODING=utf-8`，或把中文断言改成 `\uXXXX` / 百分号编码；否则 curl 脚本里的中文比较会莫名失败。
+- **curl 验收别复用开发库**：同机多 agent 共用 `esimage` 时，历史总数会被别人的生成记录污染；用独立库 `esimage_history_curl` + 独立 `STORAGE_ROOT`，每次重建才能断言 `total=21`。
+- **5 号与 4 号的 ZIP 契约有差异**：4 号 manifest 用单列「尺寸」`1000x1000`，5 号分「宽度/高度」两列；实现前先确认以哪份为准，合并时只保留一套 `zip_export`。
+- **`/batches/{batch_id}/download` 会被 4 号与 5 号同时实现**：并行分支各自挂载不会冲突，但合并后会出现重复路由；约定由 history 的 `zip_export.build_batch_zip` 作为唯一实现，4 号路由调用它，不再复制。
+- **文件名清洗不能只用 `.strip()`**：5 号要求控制字符、结尾的点与空格也替换为下划线；用 `.strip()` 会把结尾空格直接删掉，和「替换为下划线」的契约不一致。
+- **`with ThreadPoolExecutor` 会让超时失效**：`__exit__` 调用 `shutdown(wait=True)`，即使 `future.result(timeout=...)` 已抛超时，退出上下文仍要等线程读完；必须手动 `shutdown(wait=False, cancel_futures=True)`，并补一个「慢读 2 秒、超时 0.1 秒」的用例。
+- **分页先算 total 再决定是否查询**：`offset >= total` 直接返回空 `items`，否则超大 `page` 会生成超过 bigint 的 offset，PostgreSQL 返回 500 而非空页。
+- **历史列表的聚合子查询要带用户条件**：只在最外层 join 批次表加 `user_id` 不够，子查询仍会聚合全站图片；把 `user_id` 和批次状态一起下推到子查询。
+- **ZIP 与单张下载文件名必须共用函数**：两处各拼一次，改角色文案或时间戳时必然漂移；抽 `image_download_filename(batch, image)` 并断言 ZIP 条目名等于单张下载名。
+- **可见性常量只留一份**：批次状态白名单与 `final+success+visible` 判定集中到 history/service，列表、详情、ZIP 都引用，否则会出现「列表能看到、ZIP 说没图」。
+- **种子要能自愈存储丢失**：只按 `client_request_id` 跳过批次，会在删 storage 后留下全 404 的演示数据；启动时校验图片记录数、file/thumbnail 是否存在，缺失就清理并重建。
+- **curl 脚本清理范围要限定到自己的子目录**：多个 agent 共用 `backend/.curl_tmp` 时，`rm -rf .curl_tmp` 会误删他人数据；只删 `.curl_tmp/<自己的目录>`。
+- **媒体接口日志按“能力”命名而非调用方**：归档读取放在 workspace 的存储工具里时，logger 用 `esimage.storage` 比 `esimage.history` 更准确，否则按模块配置日志会漏收。

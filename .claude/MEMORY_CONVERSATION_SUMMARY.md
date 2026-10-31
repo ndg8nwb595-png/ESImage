@@ -243,3 +243,13 @@
 - 演示专用：`GET /api/v1/sessions/_probe/stream` 与 `ops.selftest`，仅非生产启用，已列入待确认。
 - 并发情况：10 号目录迁移与 `.claude/MEMORY_*` 已有并行会话改动；本次只追加 11 号内容与必要路径引用，未覆盖他人改动。
 - 未运行代码或测试；文档生成时未提交，随后提交到 `docs/deploy-ops-minimal-demo` 并合并 `main`；未创建 GitHub issue（tickets 为本地文件）。
+
+## 2026-10-31 会话 16：历史作品后端最小 demo 实现
+
+- 用户要求：连接 chrome-devtools MCP（本次为纯后端任务，未实际使用浏览器）；在仓库中找到 5 号模块目录；只做后端；新建分支开发；先理清项目层级、建模块骨架并 push、ff 合并 `main`，再完成开发；每个接口用 curl 验证；同机有其他 agent 在并行开发，调试时复用挂起进程，尤其是 docker。
+- 环境：复用已运行的 `esimage-postgres`（宿主 55433）；8000/8001 属于其他 agent，curl 验收选用 8020；验收使用独立库 `esimage_history_curl` 与 `.curl_tmp/storage_history`，避免污染同机开发库。
+- 分支：`feat/history-backend-demo`；骨架提交 `4ea5d64` 已 push 并 ff 合并 `main`。
+- 实现：`backend/app/modules/history/` 新增 `router.py`、`service.py`、`zip_export.py`、`seed.py`；`main.py` 挂载；workspace 图片预览/缩略图权限放宽为 `user.history` 或 `user.generate`，单张下载补 `full + final` 校验、归档读取与更严格文件名清洗；新增 `ARCHIVE_READ_TIMEOUT_SECONDS`。
+- 验证：`tests/test_history.py` 8 个用例；全量 `pytest` 67 个用例通过；`scripts/curl_history_smoke.sh` 覆盖接口文档 §16 全部调用并通过。
+- 独立代码审查：`code-review` 返回 10 条；已修复超大页码 500、聚合未按用户收窄、ZIP/单张文件名重复、可见性常量重复、种子文件缺失不自愈、curl 删除共享临时目录、归档超时无效（改为 `shutdown(wait=False)` 并补超时用例）。保留 3 条待用户裁决：种子计数口径、manifest 与 4 号列差异、示例图下载文案（2 号 vs 5 号）。
+- 待用户裁决：种子按「历史可见 21 个（18 completed + superseded + archived + partial）」实现，与文档表格「21 个 completed + 1 partial」存在计数口径差异；manifest 按 5 号列（宽度/高度分开），与 4 号「尺寸」单列不同；示例图下载 409 文案沿用 2 号「示例图确认前不可下载」。

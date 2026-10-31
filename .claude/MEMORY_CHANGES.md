@@ -817,3 +817,63 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 - `grep -rn "11-部署与运维prd.md" docs --include=*.md`：确认无旧顶层路径残留（文件夹内裸文件名与 `./` 链接属正常）。
 - `git status --short`：提交前确认移动为 rename、新增文件为 untracked，提交后已全部纳入；未执行代码、迁移、种子或回归。
 - 文档生成时未提交；随后提交到 `docs/deploy-ops-minimal-demo` 并合并 `main`；未创建 GitHub issue。
+
+## 2026-10-31 会话 16：历史作品后端最小 demo 实现
+
+### 分支与提交
+
+- 从 `main` 创建 `feat/history-backend-demo`。
+- 骨架提交 `4ea5d64 chore: 建立历史作品后端模块骨架`：新增 `backend/app/modules/history/README.md`；push 后 `git merge --ff-only` 到 `main` 并 push。
+- 业务实现提交（待本次会话结束时提交）：见下方文件清单。
+
+### 新增文件
+
+- `backend/app/modules/history/router.py`：`GET /history`、`GET /history/{batch_id}`、`GET /batches/{batch_id}/download`。
+- `backend/app/modules/history/service.py`：历史可见性查询、分页、封面、详情序列化、`page` 校验。
+- `backend/app/modules/history/zip_export.py`：整组 ZIP 与 `manifest.csv`，与 4 号 demo 08 共用契约。
+- `backend/app/modules/history/seed.py`：幂等演示夹具（demo_user 21 个历史可见批次 + 示例/失败批次 + demo_dual 其他用户批次）。
+- `backend/tests/test_history.py`：7 个历史接口用例，含分页、详情、权限、媒体、ZIP、归档降级。
+- `backend/scripts/curl_history_smoke.sh`：独立数据库/存储的 curl 验收脚本。
+
+### 修改文件
+
+- `backend/app/main.py`：挂载 history router。
+- `backend/app/core/config.py`：新增 `ARCHIVE_READ_TIMEOUT_SECONDS`（默认 60）。
+- `backend/.env.example`：补充 `ARCHIVE_READ_TIMEOUT_SECONDS`。
+- `backend/scripts/seed.py`：登录种子后调用 `seed_history`。
+- `backend/scripts/curl_smoke.sh`：补充 `ARCHIVE_READ_TIMEOUT_SECONDS` 导出。
+- `backend/app/modules/workspace/service.py`：
+  - 新增 `require_any_permission`（预览/缩略图双权限）。
+  - `safe_filename_part` 按 5 号 §8.3 收紧：控制字符、结尾点与空格替换为下划线。
+  - 新增 `archive_relative_path`、`read_image_bytes`、归档错误日志；归档读取超时用线程池。
+- `backend/app/modules/workspace/generations.py`：
+  - `/images/{id}/content`、`/thumbnail` 权限放宽为 `user.history` 或 `user.generate`。
+  - 单张下载增加 `batch_type=full`、`image_type=final` 校验；归档件走 `read_image_bytes`；下载 `Cache-Control: no-store`。
+
+### 验证命令与结果
+
+- `python -m pytest tests/test_history.py -q`：8 passed。
+- `python -m pytest -q`：67 passed。
+- `python -m compileall -q app tests scripts`：通过。
+- `bash scripts/curl_history_smoke.sh`：通过；覆盖列表/分页、详情、404/403、缩略图、内容、单张下载、非法文件名、示例下载 409、整组 ZIP（completed/partial/sample）、归档读取与缺失降级 30014、管理员 403、未登录 401。
+- 复用 docker `esimage-postgres`（55433）；curl 使用独立库 `esimage_history_curl`，未干扰其他 agent。
+
+### 独立代码审查与修复（code-review，10 条）
+
+已修复：
+
+- 超大 `page` 导致 offset 溢出 PostgreSQL bigint：先算 total，`offset >= total` 直接返回空 `items`；补超大页码用例与 curl 断言。
+- `/history` 聚合子查询未按用户收窄：子查询内加 `GeneratedImage.user_id`、批次 user/type/status 过滤，避免全站扫描。
+- ZIP 与单张下载文件名重复实现：抽出 `workspace.service.image_download_filename`，两处共用；补 ZIP 条目名与单张下载名一致性断言。
+- 历史可见状态/判定重复：集中到 `history.service.HISTORY_BATCH_STATUSES`、`is_visible_image`，`zip_export` 复用。
+- 归档超时无效：`with ThreadPoolExecutor` 退出会等待线程，改为 `shutdown(wait=False, cancel_futures=True)`；补慢读超时用例（0.1 秒内返回 30014）。
+- 种子只按批次幂等：新增 `_seed_artifacts_missing` / `_reset_seed_batches`，数据库保留但存储丢失时自动清理并重建；已手工验证「删 storage 后重跑种子」。
+- curl 脚本 `rm -rf .curl_tmp` 误删共享目录：只清理 `.curl_tmp/history` 与 `.curl_tmp/storage_history`。
+- 归档错误日志 logger 从 `esimage.history` 改为中性的 `esimage.storage`，并同步测试。
+
+保留待用户裁决：
+
+- 种子计数：文档表格写「21 个 completed + 1 partial」，但接口文档 §16 验收写 `total=21`；实现取 21 个历史可见批次（18 completed + superseded + archived + partial），以便验收脚本 `total=21` 成立。
+- `manifest.csv`：按 5 号列「宽度/高度」分开；4 号接口文档用单列「尺寸」（`1000x1000`），需与 4 号 demo 08 统一。
+- 示例图下载 409 文案：沿用 2 号「示例图确认前不可下载」，5 号 §8.4 写「当前图片不可下载」；为不破坏 2 号已有调用暂未改。
+- 归档读取/文件名工具仍在 `workspace/service.py`（history 反向 import），未迁移到 `app/core`；架构归属需用户确认。

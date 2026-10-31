@@ -40,6 +40,11 @@ class Settings:
         # 演示生成管线每个阶段的停顿秒数，便于前端观察阶段进度
         self.DEMO_PIPELINE_STAGE_DELAY = float(os.getenv("DEMO_PIPELINE_STAGE_DELAY", "0.15"))
 
+        # 历史作品归档原件读取超时（秒）；超时按「文件归档中」处理
+        self.ARCHIVE_READ_TIMEOUT_SECONDS = float(
+            os.getenv("ARCHIVE_READ_TIMEOUT_SECONDS", "60")
+        )
+
         if not self.JWT_SECRET:
             raise RuntimeError(
                 "缺少 JWT_SECRET 环境变量。请复制 backend/.env.example 为 backend/.env 并设置随机密钥。"

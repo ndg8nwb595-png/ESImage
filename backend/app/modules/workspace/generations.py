@@ -5,7 +5,7 @@ from __future__ import annotations
 from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -19,11 +19,12 @@ from app.modules.workspace.schemas import ConfirmGenerationRequest, SampleGenera
 from app.modules.workspace.service import (
     get_owned_session,
     image_content_url,
+    image_download_filename,
     image_thumbnail_url,
     now_utc,
+    read_image_bytes,
+    require_any_permission,
     require_permission,
-    safe_filename_part,
-    filename_timestamp,
     session_title_from_product,
     to_iso,
     validate_idempotency_key,
@@ -411,11 +412,24 @@ def _get_owned_image(db: Session, user_id: int, image_id: int) -> GeneratedImage
 @router.get("/images/{image_id}/content")
 def get_image_content(
     image_id: int,
-    auth: AuthContext = Depends(require_permission("user.generate")),
+    auth: AuthContext = Depends(require_any_permission("user.history", "user.generate")),
     db: Session = Depends(get_db),
-) -> FileResponse:
-    """大图预览：示例图与正式图都可读，下载权限由下载接口单独控制。"""
+) -> Response:
+    """大图预览：示例图与正式图都可读，下载权限由下载接口单独控制。
+
+    归档图片（`archived_at` 非空）从 `archive/` 读取；读取慢/不可用时按 5 号文案返回。
+    """
     image = _get_owned_image(db, auth.user.id, image_id)
+    if image.archived_at is not None:
+        data = read_image_bytes(image)
+        return Response(
+            content=data,
+            media_type="image/png",
+            headers={
+                "Cache-Control": "private, max-age=300",
+                "Content-Disposition": "inline",
+            },
+        )
     if not image.file_path:
         raise ApiError(404, 30014, "文件不存在")
     path = storage.path(image.file_path)
@@ -434,7 +448,7 @@ def get_image_content(
 @router.get("/images/{image_id}/thumbnail")
 def get_image_thumbnail(
     image_id: int,
-    auth: AuthContext = Depends(require_permission("user.generate")),
+    auth: AuthContext = Depends(require_any_permission("user.history", "user.generate")),
     db: Session = Depends(get_db),
 ) -> FileResponse:
     """结果网格缩略图（与 5 号文档的接口约定保持一致）。"""
@@ -459,35 +473,48 @@ def download_image(
     image_id: int,
     auth: AuthContext = Depends(require_permission("user.history")),
     db: Session = Depends(get_db),
-) -> FileResponse:
+) -> Response:
     """下载正式图 PNG；示例图确认前、失败图、取消半成品不可下载。"""
     image = _get_owned_image(db, auth.user.id, image_id)
 
     if image.image_type == "sample":
         raise ApiError(409, 30005, "示例图确认前不可下载")
-    if image.status != "success" or not image.is_history_visible:
+    if (
+        image.image_type != "final"
+        or image.status != "success"
+        or not image.is_history_visible
+    ):
         raise ApiError(409, 30005, "当前图片不可下载")
 
     batch = db.get(GenerationBatch, image.batch_id)
-    if batch is None or batch.status not in ("completed", "partially_failed"):
+    if (
+        batch is None
+        or batch.batch_type != "full"
+        or batch.status not in ("completed", "partially_failed")
+    ):
         raise ApiError(409, 30005, "当前图片不可下载")
+
+    # 与历史整组 ZIP 共用同一命名规则，避免两处漂移
+    filename = image_download_filename(
+        batch.product_name,
+        image.image_role,
+        image.index_no,
+        image.created_at,
+    )
+    headers = {
+        "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}",
+        "Cache-Control": "no-store",
+    }
+
+    # 归档件按 5 号契约从 archive/ 读取；热数据继续走 FileResponse
+    if image.archived_at is not None:
+        data = read_image_bytes(image)
+        return Response(content=data, media_type="image/png", headers=headers)
+
     if not image.file_path:
         raise ApiError(404, 30014, "文件不存在")
-
     path = storage.path(image.file_path)
     if not path.is_file():
         raise ApiError(404, 30014, "文件不存在")
 
-    role_label = "主图" if image.image_role == "main" else "详情图"
-    filename = (
-        f"{safe_filename_part(batch.product_name)}_{role_label}_"
-        f"{image.index_no}_{filename_timestamp(image.created_at)}.png"
-    )
-    return FileResponse(
-        path,
-        media_type="image/png",
-        headers={
-            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}",
-            "Cache-Control": "private, max-age=300",
-        },
-    )
+    return FileResponse(path, media_type="image/png", headers=headers)

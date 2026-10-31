@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app import models  # noqa: F401  确保模型已注册
 from app.core.database import Base, SessionLocal, engine
 from app.modules.auth.seed import seed
+from app.modules.history.seed import seed_history
 
 
 def main() -> None:
@@ -30,6 +31,8 @@ def main() -> None:
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         seed(db)
+        # 历史作品最小 demo 夹具；重复执行时按 client_request_id 跳过
+        seed_history(db)
     print("[种子] 完成。")
 
 
