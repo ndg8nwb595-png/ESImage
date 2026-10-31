@@ -19,13 +19,13 @@ from app.core.deps import AuthContext, require_permission
 from app.core.response import ApiError, ok
 from app.core.security import hash_password
 from app.models.user import Permission, Role, User, user_roles
-from app.models.workspace import AgentRun, CreativeSession, GeneratedImage, GenerationBatch
 from app.modules.admin.accounts.schemas import (
     CreateUserRequest,
     ResetPasswordRequest,
     RolePermissionsRequest,
     UpdateUserRequest,
 )
+from app.modules.admin.accounts.service import build_user_stats
 from app.modules.workspace.service import to_iso
 
 router = APIRouter(tags=["admin-accounts"])
@@ -80,73 +80,9 @@ def _count_active_super(db: Session) -> int:
     )
 
 
-def _empty_stats() -> dict:
-    return {
-        "image_count": 0,
-        "session_count": 0,
-        "token_total": 0,
-        "failed_task_count": 0,
-        "stats_available": True,
-    }
-
-
-def _stats_for_users(db: Session, user_ids: list[int]) -> dict[int, dict]:
-    """按 6 号接口文档 §2.4 批量聚合用户统计。
-
-    一次列表最多 4 条聚合 SQL，避免按行 N+1（page_size=100 时原实现约 400 条查询）。
-    内容表已接入，stats_available 固定为 true。
-    """
-    stats = {user_id: _empty_stats() for user_id in user_ids}
-    if not user_ids:
-        return stats
-
-    image_rows = db.execute(
-        select(GeneratedImage.user_id, func.count())
-        .where(
-            GeneratedImage.user_id.in_(user_ids),
-            GeneratedImage.image_type == "final",
-            GeneratedImage.status == "success",
-        )
-        .group_by(GeneratedImage.user_id)
-    )
-    for user_id, count in image_rows:
-        stats[user_id]["image_count"] = int(count)
-
-    session_rows = db.execute(
-        select(CreativeSession.user_id, func.count())
-        .where(CreativeSession.user_id.in_(user_ids))
-        .group_by(CreativeSession.user_id)
-    )
-    for user_id, count in session_rows:
-        stats[user_id]["session_count"] = int(count)
-
-    # Token 归属优先 session.user_id，其次 batch.user_id（与 7 号统计口径一致）
-    owner = func.coalesce(CreativeSession.user_id, GenerationBatch.user_id)
-    token_rows = db.execute(
-        select(owner, func.coalesce(func.sum(AgentRun.prompt_tokens + AgentRun.completion_tokens), 0))
-        .select_from(AgentRun)
-        .outerjoin(CreativeSession, CreativeSession.id == AgentRun.session_id)
-        .outerjoin(GenerationBatch, GenerationBatch.id == AgentRun.batch_id)
-        .where(owner.in_(user_ids))
-        .group_by(owner)
-    )
-    for user_id, total in token_rows:
-        if user_id in stats:
-            stats[user_id]["token_total"] = int(total or 0)
-
-    failed_rows = db.execute(
-        select(GenerationBatch.user_id, func.count())
-        .where(GenerationBatch.user_id.in_(user_ids), GenerationBatch.status == "failed")
-        .group_by(GenerationBatch.user_id)
-    )
-    for user_id, count in failed_rows:
-        stats[user_id]["failed_task_count"] = int(count)
-
-    return stats
-
-
 def _user_stats(db: Session, user_id: int) -> dict:
-    return _stats_for_users(db, [user_id])[user_id]
+    """单用户统计：与列表共用批量聚合口径。"""
+    return build_user_stats(db, [user_id])[user_id]
 
 
 def _user_payload(db: Session, user: User, stats: dict | None = None) -> dict:
@@ -297,10 +233,10 @@ def list_users(
             .limit(page_size)
         )
     )
-    stats_map = _stats_for_users(db, [user.id for user in users])
+    stats_map = build_user_stats(db, [u.id for u in users])
     return ok(
         {
-            "items": [_user_payload(db, u, stats=stats_map[u.id]) for u in users],
+            "items": [_user_payload(db, u, stats_map[u.id]) for u in users],
             "total": total,
             "page": page,
             "page_size": page_size,

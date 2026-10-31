@@ -19,7 +19,7 @@ USERS_URL = "/api/v1/admin/users"
 ROLES_URL = "/api/v1/admin/roles"
 AUDIT_URL = "/api/v1/admin/audit-logs"
 
-SEED_USERNAMES = {"demo_super", "demo_user", "demo_admin", "demo_dual"}
+SEED_USERNAMES = {"demo_super", "demo_user", "demo_user2", "demo_admin", "demo_dual"}
 ALL_PERMISSION_CODES = {item[0] for item in PERMISSIONS}
 
 
