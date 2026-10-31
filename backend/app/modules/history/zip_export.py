@@ -27,7 +27,7 @@ from app.modules.workspace.service import (
     to_iso,
 )
 
-MANIFEST_HEADER = ("序号", "文件名", "状态", "宽度", "高度", "生成时间", "失败原因")
+MANIFEST_HEADER = ("序号", "文件名", "状态", "尺寸", "生成时间", "失败原因")
 
 
 @dataclass
@@ -46,7 +46,7 @@ def _get_download_batch(db: Session, user_id: int, batch_id: int) -> GenerationB
     if batch.user_id != user_id:
         raise ApiError(403, 20005, "无权限")
     if batch.batch_type != "full" or batch.status not in HISTORY_BATCH_STATUSES:
-        raise ApiError(409, 30005, "当前批次不可下载")
+        raise ApiError(409, 30005, "当前批次不支持整组下载")
     return batch
 
 
@@ -93,20 +93,22 @@ def _manifest_text(
     for index in range(1, batch.total_count + 1):
         image = latest.get(index)
         if image is not None and is_visible_image(image):
+            width = image.width if image.width is not None else ""
+            height = image.height if image.height is not None else ""
+            size = f"{width}x{height}" if width != "" and height != "" else ""
             writer.writerow(
                 (
                     index,
                     filenames[index],
                     "success",
-                    image.width if image.width is not None else "",
-                    image.height if image.height is not None else "",
-                    to_iso(image.created_at),
+                    size,
+                    to_iso(image.created_at) or "",
                     "",
                 )
             )
             continue
         reason = (image.error_message or "").strip() if image else ""
-        writer.writerow((index, "", "failed", "", "", "", reason or "生成失败"))
+        writer.writerow((index, "", "failed", "", "", reason or "生成失败"))
 
     return ("﻿" + buffer.getvalue()).encode("utf-8")
 

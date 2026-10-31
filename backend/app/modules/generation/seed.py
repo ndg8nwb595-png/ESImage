@@ -23,6 +23,11 @@ from app.models.config import (
 )
 from app.modules.generation import config_service
 
+PROMPT_REVISION_MARKERS = {
+    "quality_reviewer": "不单独导致 passed=false",
+    "prompt_builder": "默认不出现真人正脸",
+}
+
 SYSTEM_PROMPTS: dict[str, tuple[str, str]] = {
     "planner": (
         "规划 Agent",
@@ -64,7 +69,8 @@ SYSTEM_PROMPTS: dict[str, tuple[str, str]] = {
 3. whitespace 给出 top_ratio 与 bottom_ratio（0~0.5）。
 4. reference_asset_ids 只能使用素材候选中的 material_id。
 5. model_params 的 width/height 使用给定尺寸。
-6. images 固定 6 项，index 为 1~6。
+6. 默认不出现真人正脸；优先平铺/挂拍/局部特写，除非用户明确要求模特上身。
+7. images 固定 6 项，index 为 1~6。
 只输出 JSON，不要输出解释或 Markdown。结构：
 {"images":[{"index":1,"prompt":"","negative_prompt":"","whitespace":{"top_ratio":0.18,"bottom_ratio":0.22},"reference_asset_ids":[],"model_params":{"width":1000,"height":1000}}]}""",
     ),
@@ -77,10 +83,12 @@ SYSTEM_PROMPTS: dict[str, tuple[str, str]] = {
     ),
     "quality_reviewer": (
         "质量审核 Agent",
-        """你是电商图片质量审核 Agent。检查生成图是否存在：商品变形、主体缺失、留白区不可用、违规内容。
+        """你是电商图片质量审核 Agent。检查生成图是否存在：商品变形、主体缺失、严重违规。
+留白区是否可用只作为 issues 提示，不单独导致 passed=false（后端会在文字合成阶段加半透明底兜底）。
+只有商品主体变形/缺失/严重违规才判 passed=false。
 只输出 JSON，不要输出解释或 Markdown。结构：
 {"passed":true,"issues":[],"checks":{"product_fidelity":"pass","deformity":"pass","whitespace_available":"pass","compliance":"pass"}}
-任何一项不通过时 passed=false，并在 issues 中用中文说明具体问题。""",
+任何硬性项不通过时 passed=false，并在 issues 中用中文说明具体问题。""",
     ),
     "repairer": (
         "修复 Agent",
@@ -212,6 +220,22 @@ def _ensure_prompts(db: Session) -> None:
                     )
                 )
                 print(f"[种子] 升级系统提示词 {agent_code} 至 v{existing.current_version}")
+            else:
+                marker = PROMPT_REVISION_MARKERS.get(agent_code)
+                if marker and marker not in (existing.content or ""):
+                    existing.content = content
+                    existing.current_version = (existing.current_version or 1) + 1
+                    db.add(
+                        PromptVersion(
+                            prompt_id=existing.id,
+                            agent_code=agent_code,
+                            version=existing.current_version,
+                            content=content,
+                        )
+                    )
+                    print(
+                        f"[种子] 定向升级系统提示词 {agent_code} 至 v{existing.current_version}"
+                    )
             continue
         prompt = SystemPrompt(
             agent_code=agent_code,

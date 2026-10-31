@@ -133,7 +133,7 @@ echo "[curl] 启动 uvicorn :$PORT"
 python -m uvicorn app.main:app --host 127.0.0.1 --port "$PORT" > "$TMP_DIR/uvicorn.log" 2>&1 &
 SERVER_PID=$!
 for _ in $(seq 1 60); do
-  code=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$PORT/openapi.json" || true)
+  code=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$PORT/api/openapi.json" || true)
   [ "$code" = "200" ] && break
   sleep 1
 done

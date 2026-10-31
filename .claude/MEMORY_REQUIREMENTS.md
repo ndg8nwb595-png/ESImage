@@ -430,3 +430,19 @@
 - 用户选择：真实 Seedream 额度恢复前**不合并 main**，保留 `feat/generation-backend-demo` 分支；额度调整后先跑 `bash backend/scripts/curl_smoke_generation.sh`，真实通过再合并。
 - 分支已 rebase 到 `origin/main`（`fcc1fde`，含 3 号聊天后端与管理后台骨架），解决 `config.py` / `main.py` / `.env.example` / 5 个 Memory 文档冲突后，全量 **102 passed**，替身 curl 全接口通过，已 force-push 到 `4d392a8`。
 - 当前唯一未完成项：真实生图模型调用仍返回 429 `SetLimitExceeded`（账号安全体验模式额度），不是代码缺陷。
+
+## 2026-10-31 会话 17：skill 接入与主分支集成
+
+| 需求 | 状态 | 实现手段 |
+| --- | --- | --- |
+| 加载 `backend/skills/generation-pipeline` | 完成 | generation README 与 backend README 引用；按八条铁律调整管线 |
+| rebase 最新 main | 完成 | 9ea5316；解决 config/main/models/seed/test/gitignore/memory 冲突 |
+| 复用 10 号配置表 | 完成 | 删除 `models/generation.py`，统一 `models/config.py` |
+| 6 号管理端路由隔离 | 完成 | admin assets 移到 `/api/v1/admin/templates|materials|sizes`；contract map 同步 |
+| 5 号共享 ZIP | 完成 | 4 号 `/batches/{id}/download` 使用 `history/zip_export.py`；manifest 统一 4 号表头 |
+| 归档媒体读取 | 完成 | 预览/下载走 `read_image_bytes`；单张下载 `no-store` |
+| 重试幂等列迁移 | 完成 | Alembic `0004_image_client_request` |
+| 留白兜底优化 | 完成 | prompt 追加比例；仅留白失败转 warning + 强制半透明底；质量提示词校准 |
+| pytest | 完成 | **160 passed**（含主分支模块） |
+| 替身 curl | 完成 | 全部接口通过 |
+| 真实 Seedream 全链路 | 复验中 | 安全体验模式已关闭；真实单图/示例已成功 |

@@ -87,6 +87,10 @@ PERMISSION_MAP: dict[tuple[str, str], str | tuple[str, ...] | None] = {
     ("GET", "/api/v1/admin/chat/sessions/{session_id}"): "admin.content.view",
     ("GET", "/api/v1/admin/chat/messages/search"): "admin.content.view",
     ("GET", "/api/v1/admin/agent-runs/{run_id}"): "admin.content.view",
+    # ---- 用户端：生图配置只读 ----
+    ("GET", "/api/v1/templates"): "user.generate",
+    ("GET", "/api/v1/templates/{template_id}/thumbnail"): "user.generate",
+    ("GET", "/api/v1/sizes"): "user.generate",
     # ---- 管理端：Agent 配置 ----
     ("GET", "/api/v1/admin/model-config"): "admin.model.view",
     ("PUT", "/api/v1/admin/model-config"): "admin.model.edit",

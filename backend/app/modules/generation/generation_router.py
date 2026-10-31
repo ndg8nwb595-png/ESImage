@@ -5,11 +5,12 @@ from __future__ import annotations
 from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.common import require_any_permission
 from app.core.database import get_db
 from app.core.deps import AuthContext
 from app.core.response import ApiError, ok
@@ -48,6 +49,7 @@ from app.modules.generation.service import (
     batch_payload,
 )
 from app.modules.generation.state import transition_batch, transition_image
+from app.modules.workspace.service import read_image_bytes
 
 router = APIRouter(tags=["generation"])
 
@@ -526,18 +528,16 @@ def regenerate_image(
 @router.get("/images/{image_id}/content")
 def get_image_content(
     image_id: int,
-    auth: AuthContext = Depends(require_permission("user.generate")),
+    auth: AuthContext = Depends(require_any_permission("user.generate", "user.history")),
     db: Session = Depends(get_db),
-) -> FileResponse:
-    """大图预览：示例图与当前正式图可读；superseded 旧图不提供。"""
+) -> Response:
+    """大图预览：示例图与当前正式图可读；归档件由 read_image_bytes 读取。"""
     image = get_owned_image(db, auth.user.id, image_id)
-    if image.status == "superseded" or not image.file_path:
+    if image.status == "superseded":
         raise ApiError(404, 30014, "文件不存在")
-    path = storage.path(image.file_path)
-    if not path.is_file():
-        raise ApiError(404, 30014, "文件不存在")
-    return FileResponse(
-        path,
+    data = read_image_bytes(image)
+    return Response(
+        content=data,
         media_type="image/png",
         headers={
             "Cache-Control": "private, max-age=300",
@@ -549,7 +549,7 @@ def get_image_content(
 @router.get("/images/{image_id}/thumbnail")
 def get_image_thumbnail(
     image_id: int,
-    auth: AuthContext = Depends(require_permission("user.generate")),
+    auth: AuthContext = Depends(require_any_permission("user.generate", "user.history")),
     db: Session = Depends(get_db),
 ) -> FileResponse:
     """结果网格缩略图；与 2/5 号 demo 的路径契约保持一致。"""
@@ -588,19 +588,14 @@ def download_image(
     batch = db.get(GenerationBatch, image.batch_id)
     if batch is None or batch.status not in ("completed", "partially_failed"):
         raise ApiError(409, 30005, "当前图片不可下载")
-    if not image.file_path:
-        raise ApiError(404, 30014, "文件不存在")
-
-    path = storage.path(image.file_path)
-    if not path.is_file():
-        raise ApiError(404, 30014, "文件不存在")
-
+    data = read_image_bytes(image)
     filename = image_download_filename(batch, image)
-    return FileResponse(
-        path,
+    return Response(
+        content=data,
         media_type="image/png",
         headers={
             "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}",
-            "Cache-Control": "private, max-age=300",
+            # 5 号历史下载口径：不允许客户端缓存
+            "Cache-Control": "no-store",
         },
     )

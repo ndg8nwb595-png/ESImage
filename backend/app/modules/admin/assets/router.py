@@ -19,7 +19,7 @@ from app.modules.workspace.imaging import decode_image, make_thumbnail_webp
 from app.modules.workspace.service import MAX_IMAGE_BYTES, to_iso
 from app.modules.workspace.storage import storage
 
-router = APIRouter(tags=["admin-assets"])
+router = APIRouter(prefix="/admin", tags=["admin-assets"])
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 

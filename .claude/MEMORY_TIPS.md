@@ -232,3 +232,14 @@
 - **重试要沿用最终提示词**：图片表里的 `prompt` 可能是修复 Agent 改写后的最终版本；重试时若从示例批次重新取原始提示词，会把修复效果丢掉。
 - **批次从部分失败恢复为 completed 时要清 error_message**：否则前端在已完成批次上仍显示旧的失败提示。
 - **参考图数量要对齐输入上限**：校验允许 0~5 张上传图，就要全部参与商品理解/生图；只在管道里取前 2 张会造成“校验通过但模型没看到”的静默缺失。
+
+- **FastAPI 同路径路由先注册者胜出**：6 号管理端素材路由和 4 号用户只读路由都用了 `/templates`、`/sizes`；必须把管理端移到 `/admin/...`，否则用户 curl 会 403。改路径时同步 `contract/openapi.py` 权限映射。
+- **主分支数据底座会提供同名配置表**：合并前先看 `app/models/config.py`；不要保留自己的 `models/generation.py`，否则 SQLAlchemy metadata 会重复建表。
+- **共享 ZIP 实现只能有一份**：5 号历史模块已提供 `build_batch_zip`/`read_image_bytes`；4 号直接复用，避免 manifest 表头、归档读取、越权状态码三套口径。
+- **归档件不能走 `FileResponse(storage.path(file_path))`**：归档后原件在 `archive/` 下，必须用 `read_image_bytes`，否则历史测试 404。
+- **质量审核的留白项应降级为 warning**：Seedream 对留白比例服从度有限；仅留白失败时用 `compose_text(force_panel=True)` 半透明底兜底，比直接判整张失败更符合 PRD §7.3。
+- **提示词要显式写比例**：只写“留白”模型经常忽略；追加“上方约 18% / 下方约 22% 纯净留白，主体位于中间”后服从度更好。
+- **改 `.env` 模型名后要同步 `model_configs`**：种子幂等不覆盖已有行；本次通过“demo/空模型名才同步”的规则避免覆盖后台配置。
+- **长提示词升级用 marker 判定**：不能只按长度覆盖；quality/prompt_builder 各带一个 revision marker，缺失才升级并写新 PromptVersion。
+- **TestClient 拒绝非 ASCII header**：`X-Request-ID: bad id!中文` 会在 httpx 层报 UnicodeEncodeError；测试无效 header 用纯 ASCII（如 `bad id!`）即可验证中间件重新生成。
+- **主分支测试也有环境坑**：`test_selftest_pure` 对不存在的 `delay_ms` 做 monkeypatch；应删除该行而不是给模块加假属性。

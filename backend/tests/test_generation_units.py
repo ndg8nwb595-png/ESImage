@@ -9,7 +9,11 @@ from PIL import Image
 
 from app.models.workspace import GeneratedImage, GenerationBatch
 from app.modules.generation.composition import build_default_layout, compose_text
-from app.modules.generation.pipeline import _regenerate_prompt_item
+from app.modules.generation.pipeline import (
+    _only_whitespace_issue,
+    _regenerate_prompt_item,
+    _with_whitespace_instruction,
+)
 from app.modules.generation.state import (
     IllegalTransition,
     can_transition_batch,
@@ -96,6 +100,61 @@ def test_state_machine_illegal_transitions():
         transition_image(image, "generating")
     transition_image(image, "superseded")
     assert image.status == "superseded"
+
+
+def test_only_whitespace_issue_detection():
+    print("[测试] 只有留白不足时才走合成兜底，其他硬性项失败仍需修复")
+    assert _only_whitespace_issue(
+        {
+            "passed": False,
+            "issues": ["顶部留白不足"],
+            "checks": {
+                "product_fidelity": "pass",
+                "deformity": "pass",
+                "whitespace_available": "fail",
+                "compliance": "pass",
+            },
+        }
+    )
+    assert not _only_whitespace_issue(
+        {
+            "passed": False,
+            "checks": {
+                "product_fidelity": "fail",
+                "deformity": "pass",
+                "whitespace_available": "fail",
+            },
+        }
+    )
+    assert not _only_whitespace_issue(
+        {"passed": False, "checks": {"whitespace_available": "pass"}}
+    )
+
+
+def test_with_whitespace_instruction_is_idempotent():
+    print("[测试] 生图提示词追加显式留白比例，重复调用不重复追加")
+    item = {
+        "prompt": "简洁白底，商品居中",
+        "whitespace": {"top_ratio": 0.18, "bottom_ratio": 0.22},
+    }
+    first = _with_whitespace_instruction(item)
+    assert "【构图留白要求】" in first["prompt"]
+    assert "18%" in first["prompt"] and "22%" in first["prompt"]
+    second = _with_whitespace_instruction(first)
+    assert second["prompt"] == first["prompt"]
+
+
+def test_compose_text_force_panel_on_light_background():
+    print("[测试] 留白不足时强制加半透明底，浅色背景也会提亮文字区")
+    base = Image.new("RGB", (1000, 1000), (245, 245, 245))
+    buffer = BytesIO()
+    base.save(buffer, format="PNG")
+    layout = build_default_layout(
+        {"title": "轻盈透气 一整天", "selling_points": ["冰感面料"]}, 1000, 1000
+    )
+    result = compose_text(buffer.getvalue(), layout, force_panel=True)
+    assert result.png.startswith(b"\x89PNG")
+    assert Image.open(BytesIO(result.png)).size == (1000, 1000)
 
 
 def test_regenerate_prompt_prefers_image_final_prompt():

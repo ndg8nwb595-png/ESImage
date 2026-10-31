@@ -400,3 +400,16 @@
 - **批次错误清理**：重试汇总为 completed 时必须把 `batch.error_message` 清空；partially_failed / failed 分别写入对应摘要。
 - **参考图上限**：用户上传图 0~5 张全部参与商品理解与生图；上传图 + 素材合计最多送 6 张参考图，单张压缩到 1024px JPEG。
 - **审查结论**：两轴审查的功能问题已修复；剩余外部阻塞仍是 Seedream 账号额度（429），以及 AGENTS.md 要求的 GitHub issue 尚未创建（本地 tickets 为现状）。
+
+## 4 号 skill 接入与主分支集成（2026-10-31 会话 17）
+
+- **Skill 定位**：`backend/skills/generation-pipeline/` 是操作指引而非运行时代码；generation README 与 backend README 引用它，管线按其八条铁律实现。
+- **数据模型归属**：生成配置表（templates/material_assets/model_configs/system_prompts/prompt_versions/size_presets）统一归 10 号 `app/models/config.py`；4 号不再维护自己的副本。`generated_images.client_request_id` 是 4 号内部幂等列，通过 Alembic 0004 落地。
+- **路由边界**：用户端只读配置保持 `/api/v1/templates`、`/sizes`、`/templates/{id}/thumbnail`；管理端素材/模板/尺寸统一在 `/api/v1/admin/...`，与 6 号契约一致，避免 FastAPI 同路径先注册者胜出。
+- **共享 ZIP**：整组 ZIP 以 5 号 `history/zip_export.py` 为唯一实现；4 号不再写第二套。manifest 表头统一为 4 号口径 `序号,文件名,状态,尺寸,生成时间,失败原因`；越权返回 403，符合 4 号“404 或 403”口径。
+- **媒体读取**：预览/下载使用 `workspace.service.read_image_bytes`，统一处理热存储与 `archive/` 前缀、超时与错误码；content/thumbnail 允许 `user.generate` 或 `user.history`；单张下载 `Cache-Control: no-store`。
+- **种子策略**：10/6 号种子写入的 <80 字占位提示词会被升级为 4 号详细提示词；已有长提示词不覆盖。quality_reviewer/prompt_builder 通过 revision marker 定向升级。demo/空模型名会同步为真实环境模型名。
+- **留白策略**：生图 prompt 追加显式 top/bottom 留白比例；质量审核仅 `whitespace_available=fail` 时降级为 warning，由 `compose_text(force_panel=True)` 加半透明底兜底；其他硬性项失败仍走修复/失败。
+- **取消与并发**：沿用复审结论——重试并发覆盖 `pending + generating`；生图开始后在途图允许完成；取消只阻止新图。
+- **测试环境**：主分支 160 项测试全部通过；两个 ops 测试问题属于主分支既有环境问题，已做最小修复（ASCII 无效 header、移除不存在的 delay_ms monkeypatch）。
+- **环境**：复用 `esimage-postgres` 55433，独立库 `esimage_generation` / `esimage_generation_test`；真实模型 `doubao-seed-character-260628` / `doubao-seed-2-1-lite-260915` / `doubao-seedream-5-0-pro-260628`。

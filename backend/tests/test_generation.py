@@ -177,6 +177,12 @@ def test_config_endpoints_and_permissions(client):
     forbidden = client.get(TEMPLATES_URL, headers=_headers(admin_token))
     assert forbidden.status_code == 403 and forbidden.json()["code"] == 20005
 
+    print("[测试] 步骤 6：管理端模板维护仍在 /admin/templates，与用户只读接口隔离")
+    admin_assets = client.get("/api/v1/admin/templates", headers=_headers(admin_token))
+    assert admin_assets.status_code == 200, admin_assets.text
+    user_assets = client.get("/api/v1/admin/templates", headers=_headers(token))
+    assert user_assets.status_code == 403 and user_assets.json()["code"] == 20005
+
 
 # ---------------------------------------------------------------- 示例批次
 
@@ -698,9 +704,7 @@ def test_ownership_isolation_for_generation(client):
         ).status_code
         == 404
     )
-    assert (
-        client.get(
-            f"/api/v1/batches/{batch_id}/download", headers=_headers(other_token)
-        ).status_code
-        == 404
+    other_zip = client.get(
+        f"/api/v1/batches/{batch_id}/download", headers=_headers(other_token)
     )
+    assert other_zip.status_code == 403 and other_zip.json()["code"] == 20005

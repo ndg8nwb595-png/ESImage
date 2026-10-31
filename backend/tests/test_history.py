@@ -323,7 +323,7 @@ def test_history_zip_completed_and_partial(client):
         if name.endswith(".png"):
             assert archive.read(name).startswith(b"\x89PNG")
     rows = _read_manifest(archive)
-    assert rows[0] == ["序号", "文件名", "状态", "宽度", "高度", "生成时间", "失败原因"]
+    assert rows[0] == ["序号", "文件名", "状态", "尺寸", "生成时间", "失败原因"]
     assert len(rows) == 7
     assert all(row[2] == "success" for row in rows[1:])
     assert [row[0] for row in rows[1:]] == ["1", "2", "3", "4", "5", "6"]
@@ -341,7 +341,7 @@ def test_history_zip_completed_and_partial(client):
     assert partial_rows[6][0] == "6"
     assert partial_rows[6][1] == ""
     assert partial_rows[6][2] == "failed"
-    assert partial_rows[6][6] == "生图执行失败"
+    assert partial_rows[6][5] == "生图执行失败"
 
     print("[历史测试] 步骤 3：示例批次 409，越权 403，不存在 404")
     sample = _seed_batch("sample")

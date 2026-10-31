@@ -111,8 +111,7 @@ def test_request_id_invalid_regenerated(client):
     invalid_id = "bad id!"
     resp = client.get("/api/health", headers={"X-Request-ID": invalid_id})
     rid = resp.headers["x-request-id"]
-    assert rid != invalid_id
-    assert _valid_request_id(rid)
+    assert rid != invalid_id    assert _valid_request_id(rid)
 
 
 def test_request_id_missing_generated(client):

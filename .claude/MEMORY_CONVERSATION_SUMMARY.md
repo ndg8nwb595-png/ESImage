@@ -350,3 +350,21 @@
 - 用户选择：真实 Seedream 额度恢复前**不合并 main**，保留 `feat/generation-backend-demo` 分支；额度调整后先跑 `bash backend/scripts/curl_smoke_generation.sh`，真实通过再合并。
 - 分支已 rebase 到 `origin/main`（`fcc1fde`，含 3 号聊天后端与管理后台骨架），解决 `config.py` / `main.py` / `.env.example` / 5 个 Memory 文档冲突后，全量 **102 passed**，替身 curl 全接口通过，已 force-push 到 `4d392a8`。
 - 当前唯一未完成项：真实生图模型调用仍返回 429 `SetLimitExceeded`（账号安全体验模式额度），不是代码缺陷。
+
+## 2026-10-31 会话 17：接入生图管线 skill 并合并主分支数据底座
+
+- 用户要求：main 新推了 `backend/skills/generation-pipeline/`（SKILL.md + agents-contract.md + state-machine.md），把它加载到 4 号生图任务中并优化整个流程。
+- 已将分支 rebase 到最新 `origin/main`（9ea5316，含 10 号数据模型、5 号历史、11 号运维、6/7/8 管理后台、9 号契约）。冲突处理：
+  - 生成配置表复用 10 号 `app/models/config.py`，删除重复的 `app/models/generation.py`。
+  - 管理后台素材路由从 `/api/v1/templates|materials|sizes` 移到 `/api/v1/admin/...`，与 6 号契约一致，避免与 4 号用户只读接口冲突。
+  - 4 号整组 ZIP 改为复用 5 号 `history/zip_export.py`；manifest 统一为 `序号,文件名,状态,尺寸,生成时间,失败原因`。
+  - 预览/下载改用 `read_image_bytes`，支持 `archive/` 归档件；预览/缩略图权限放宽为 `user.generate` 或 `user.history`；单张下载 `Cache-Control: no-store`。
+  - 新增 Alembic `0004_image_client_request`，补 `generated_images.client_request_id` 幂等列。
+  - 种子会升级 10/6 号写入的简短占位提示词与 demo 模型名，并定向升级 quality_reviewer / prompt_builder。
+- 按 skill 优化：
+  - 生图 prompt 自动追加显式留白比例（`【构图留白要求】`）。
+  - 质量审核若仅 `whitespace_available=fail`，不判整张失败，改为文字合成强制半透明白底兜底；quality_reviewer 提示词同步校准。
+  - prompt_builder 默认不出现真人正脸，优先平铺/挂拍/局部特写。
+- 验证：`TEST_DB_NAME=esimage_generation_test python -m pytest` **160 passed**（含 3/5/6/7/8/9/10/11 号模块）；修复了两个主分支既有的 ops 测试环境问题（非 ASCII header、`delay_ms` monkeypatch）。
+- 替身 curl 全接口通过；真实 Seedream 全链路正在复验（留白兜底优化后）。
+- 说明：当前分支仍为 `feat/generation-backend-demo`，未合并 main。

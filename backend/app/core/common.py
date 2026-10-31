@@ -29,6 +29,17 @@ def require_permission(code: str) -> Callable[..., AuthContext]:
     return dependency
 
 
+def require_any_permission(*codes: str) -> Callable[..., AuthContext]:
+    """任意一个权限满足即可；用于历史/生成共用的媒体读取接口。"""
+
+    def dependency(auth: AuthContext = Depends(get_current_auth)) -> AuthContext:
+        if not any(code in auth.permissions for code in codes):
+            raise ApiError(403, 20005, "无权限")
+        return auth
+
+    return dependency
+
+
 def validate_product_name(value: str | None) -> str:
     """商品名称：去首尾空格后 1~60 字符。"""
     if value is None or value.strip() == "":

@@ -1286,3 +1286,32 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 - `generation/agents.py`、`generation/doubao.py`：多模态/生图参考图上限从 2/4 提升到 6。
 - 测试：新增 `test_regenerate_prompt_prefers_image_final_prompt`；补充 pending 重试并发与 completed 后错误清空断言。
 - 验证：`TEST_DB_NAME=esimage_generation_test python -m pytest` **76 passed**；替身 curl 脚本全接口通过。
+
+## 2026-10-31 会话 17：skill 接入与主分支集成
+
+### 主要修改
+
+- `backend/app/main.py`：合并主分支全部路由（chat/history/profile/admin/ops）与 4 号 generation 路由；保留 lifespan 启动校验；去除重复 include。
+- `backend/app/core/config.py`：保留 11 号 APP_ENV/日志/MinIO 等配置，追加 4 号 DOUBAO_*/批超时/字体/故障注入；ARK_* 作为共享命名。
+- `backend/app/models/__init__.py`：改用 `app.models.config`；删除 `app/models/generation.py`。
+- `backend/app/modules/generation/*`：导入改为 `app.models.config`；删除自写 `zip_export.py`；ZIP 路由删除，复用历史模块。
+- `backend/app/modules/generation/generation_router.py`：预览/下载走 `read_image_bytes`；content/thumbnail 权限 any-of；下载 `no-store`。
+- `backend/app/modules/generation/pipeline.py`：新增 `_only_whitespace_issue`、`_with_whitespace_instruction`；留白不足走合成兜底；保留复审的 pending 并发、取消在途完成、重试最终提示词等修复。
+- `backend/app/modules/generation/composition.py`：`force_panel` 半透明白底。
+- `backend/app/modules/generation/seed.py`：占位提示词/ demo 模型名升级；定向升级 quality_reviewer/prompt_builder；质量提示词校准。
+- `backend/app/modules/admin/assets/router.py`：路由加 `/admin` 前缀。
+- `backend/app/modules/contract/openapi.py`：模板/素材/尺寸管理端路径改为 `/api/v1/admin/*`，补 4 号用户只读权限映射。
+- `backend/app/modules/history/zip_export.py`：manifest 统一 4 号表头（尺寸列）；下载提示文案对齐。
+- `backend/alembic/versions/0004_image_client_request.py`：新增 `generated_images.client_request_id` 与部分唯一索引。
+- `backend/scripts/seed.py`：串接 auth/admin/generation/history 种子。
+- `backend/tests/conftest.py`：测试种子加入 generation 配置。
+- `backend/tests/test_generation*.py`、`test_history.py`、`test_ops.py`：适配共享 ZIP、归档媒体、admin 路径、留白兜底；修复主分支两个既有 ops 测试环境问题。
+- `backend/scripts/curl_smoke_generation.sh`：就绪探针改为 `/api/openapi.json`。
+- `backend/README.md`、`backend/app/modules/generation/README.md`：补充 skill 依据、接口权限、共享 ZIP、归档与留白兜底说明。
+
+### 验证
+
+- `TEST_DB_NAME=esimage_generation_test python -m pytest`：**160 passed**。
+- `APP_ENV=test GENERATION_MODEL_PROVIDER=fake AGENT_RETRY_BACKOFF_SCALE=0 bash scripts/curl_smoke_generation.sh`：全部接口通过。
+- `alembic heads`：唯一 head `0004_image_client_request`。
+- 真实 Seedream 5.0 Pro 单图生成成功；真实示例批次已跑通四类核心 Agent。

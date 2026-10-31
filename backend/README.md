@@ -151,7 +151,7 @@ TEST_DB_NAME=esimage_generation_test python -m pytest
 
 - 本文的“最小 demo”主要指 4 号生图链路：FastAPI `BackgroundTasks` + 本地目录存储 + 建表/幂等种子。
 - 主分支另有 10 号 Alembic 数据底座、11 号 Celery/Redis/MinIO 运维基线；4 号 demo 不依赖它们，正式部署可切换。
-- 生成配置（模板/素材/尺寸）用户端只读；后台维护入口在 `/api/v1/admin/...`。
+- 生成配置（模板/素材/尺寸）用户端只读；后台维护入口在 `/api/v1/admin/templates|materials|sizes`。
 - 整组 ZIP 与 `manifest.csv` 复用 5 号历史模块实现，4 号 `/batches/{id}/download` 直接使用同一契约。
 - 只审核生成图，不审核上传商品图。
 - 聊天轻链路仍是 2 号 demo 的行为，不触发生图。
