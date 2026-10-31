@@ -214,4 +214,15 @@
 - **测试修复也要先复现**：先跑目标用例确认失败原因与报告一致，再改测试；修完跑目标文件与全量，避免“看起来该过”的假绿。
 - **补齐根 `.env` 要保留用户自有变量**：本项目根 `.env` 还存有 `GITHUBTOKEN`；用追加而非重写，且不要 `cat` 出内容，避免 token 进入日志/对话。
 - **Compose 与宿主机地址不同**：根 `.env` 用服务名 `postgres/redis/minio:9000`，`backend/.env` 用宿主映射端口 `127.0.0.1:55433/6379/9002`；混用会连接失败。
-- **`docker compose config -q` 是 `.env` 的安全校验**：只返回退出码，不打印插值后的密钥；比 `docker compose config` 更适合含敏感值的环境。
+- **`docker compose config -q` 是 `.env` 的安全校验**：只返回退出码，不打印插值后的密钥；比 `docker compose config` 更适合含敏感值的环境。- **Docker 卷恢复优先“复制”而不是“改挂载”**：停止容器后把旧卷内容 `cp -a` 到当前卷，既能恢复旧数据又保留 compose 现有卷名；旧卷不要删除，作为回滚备份。- **测试清理名单要跟随种子变化**：上游新增 `demo_user2` 后，按「非种子用户」清理的测试夹具会误删它；种子账号集合要集中维护。- **中文 JSON 在 Windows Git Bash 下用 `--data-binary @文件`**：Python 写 UTF-8 文件时不要用 `/tmp` 绝对路径（Python 与 Git Bash 的 `/tmp` 映射不同），用仓库内相对目录或 `$TEMP`。- **火山方舟 `/models` 返回全局模型清单，不代表账号已开通**：`ModelNotOpen` 表示未开通；`InvalidEndpointOrModel.NotFound` 表示模型名不存在/无权限。开通后仍可能因「安全体验模式」额度返回 429 `SetLimitExceeded`，需要在控制台调整或关闭。
+- **Seedream 5.0 Pro 不接受 `sequential_image_generation` / `stream`**：传了会 400 `InvalidParameter`。只发送 `model/prompt/size/response_format/watermark` 最稳。
+- **ARK_API_KEY 优先于自定义命名**：火山方舟官方示例用 `ARK_API_KEY`；配置同时读取 `DOUBAO_API_KEY` 与 `ARK_API_KEY`，避免用户改 Key 名。
+- **改 `.env` 不会自动更新 `model_configs`**：种子是幂等的、不覆盖已有行；切换模型时要同步更新 `model_configs.image_model`（或提供后台/脚本），否则网关仍读旧值。
+- **上传图会绑定会话**：同一批上传图在「重新生成示例」时必须带首次返回的 `session_id`，否则按「已绑定其他会话」返回 30006。
+- **TestClient 会让 BackgroundTasks 同步跑完**：curl 才能看到 queued/running 的中间态；pytest 里断言终态，或直接插数据库行模拟 running。
+- **测试清理存储不要整目录删除**：模板/素材种子文件也在 `STORAGE_ROOT` 下；只删 `uploads/generated/thumbnails`，否则后续模板缩略图测试 500。
+- **Windows 终端中文乱码不一定是数据库坏了**：Python 默认按 GBK 输出时，Bash 工具按 UTF-8 解码会显示乱码；用 `sys.stdout.reconfigure(encoding='utf-8')` 再检查，并核对原始 API 字节。
+- **真实模型的输出要靠系统提示词约束**：规划要求 6 张主题不重复、文案标题 4~16 字/卖点 2~12 字（实现上比 PRD 略宽），否则严格校验会导致 10 次重试；提示词里必须写清 JSON 结构。
+- **生图失败与内容审核失败要分开**：生图接口失败走 2 次尝试；审核拦截不重试；审核接口自身失败按生图失败处理。实现时把 moderation 放在每次生图尝试内。
+- **取消不是杀线程**：Worker 在检查点读数据库状态；取消时 pending 置 cancelled，生成中的单张按检查点停止，成功图 `is_history_visible=false`，批次保持 cancelled。
+- **单张重试要防并发**：同一批次有 generating 图片时拒绝新的重试；旧图 superseded 与新图创建在同一事务，`client_request_id` 部分唯一索引兜底幂等。

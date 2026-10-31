@@ -372,4 +372,21 @@
 - **根 `.env` 只追加不覆盖**：该文件可能包含用户自己的 `GITHUBTOKEN`，补齐配置时必须保留原行且不得打印其值。
 - **Compose 内网地址**：根 `.env` 的 `DATABASE_URL`、`REDIS_URL`、`MINIO_ENDPOINT` 使用容器服务名（`postgres`、`redis`、`minio:9000`）；宿主机 `backend/.env` 使用 `127.0.0.1` 映射端口。
 - **密钥生成**：`SECRET_KEY`、`JWT_SECRET`、`ENCRYPTION_KEY`、初始超管密码使用随机值；`ENCRYPTION_KEY` 必须为 32 字节 Base64。
-- **验证方式**：改完根 `.env` 用 `docker compose config -q` 校验插值，不输出具体值；再用 `git check-ignore` 确认文件仍被忽略。
+- **验证方式**：改完根 `.env` 用 `docker compose config -q` 校验插值，不输出具体值；再用 `git check-ignore` 确认文件仍被忽略。- **Compose 卷风险**：本项目卷键为 `pgdata`，历史容器可能使用 `esimage_esimage_pgdata`；执行 `docker compose up` 前必须确认卷名，避免重建 Postgres 并切到空库。- **已知非本模块失败**：11 号 `tests/test_ops.py` 的 2 个用例在干净 `origin/main` 也失败（httpx2 中文头、`delay_ms` monkeypatch），不修改。- **已知 demo 边界**：参数校验先于幂等重放（已删除上传图的极端重试会返回 30006）；真实模型措辞需联调抽检；接口不返回 usage 时 Token 记 0。## 4 号生图任务与结果最小 demo（2026-10-31 实现共识）
+
+- **模块边界**：生成相关接口统一放 `backend/app/modules/generation/`；`workspace` 只保留会话/聊天/上传。生成路由接管 `POST /generations/sample`、`GET /generations/{id}`、`POST /confirm`、`GET /images/{id}/content|thumbnail|download`，并新增取消、单张重试、模板/尺寸、整组 ZIP。对外字段只做增量（`source_sample_batch_id`、`image_type`、`attempt_no`、`is_history_visible`），不删不改既有字段。
+- **数据模型**：`generation_batches`、`generated_images`、`agent_runs` 复用 `app/models/workspace.py`；配置表放 `app/models/generation.py`。为满足单张重试幂等，`generated_images` 增加内部列 `client_request_id`（10 号文档未列出，向后兼容，部分唯一索引）；正式实现前需与 10 号统一。
+- **共享基础设施**：`app/core/storage.py` 与 `app/core/media.py` 提供跨模块存储、缩略图、PNG 编码与缩放；不改动 `workspace` 的既有 `storage.py`/`imaging.py`。
+- **配置**：60 秒进程内缓存 + `refresh()`；只返回 `active` 模板/尺寸/素材与启用的提示词/模型配置。种子幂等，已存在的模型配置不覆盖；本次本地库通过一次性更新把 image_model 改为 `doubao-seedream-5-0-pro-260628`。
+- **模型接入**：Key 优先 `DOUBAO_API_KEY`，兼容 `ARK_API_KEY`；文本 `doubao-seed-character-260628`、视觉/审核 `doubao-seed-2-1-lite-260915`、生图 `doubao-seedream-5-0-pro-260628`。真实模式启动强校验；`APP_ENV=test` + `GENERATION_MODEL_PROVIDER=fake` 才允许替身。
+- **生图参数**：Seedream 5.0 Pro 不接受 `sequential_image_generation` / `stream`，适配层只发送 `model/prompt/size/response_format/watermark`；目标尺寸小于 100 万像素时按整数倍放大后再生成，最终缩放回批次尺寸。
+- **Agent 运行时**：非生图 10 次、退避 1/2/4/8/16/30 秒封顶；生图每张 2 次；每次尝试写 `agent_runs`；跳过的 Agent 只写一条 `skipped`。结构化输出校验失败按一次失败处理。
+- **文字合成**：默认版式标题上方 15%、卖点下方 20%、左右边距 8%；标题/卖点字号随画布缩放；超长缩到下限后截断并记录 warnings；深色底加半透明白底。字体优先 `FONT_PATH`，其次 Windows/Noto/文泉驿候选；生产缺失 fail-fast，测试环境降级默认字体。
+- **状态机**：批次与单图迁移集中在 `state.py`；`sample_ready → running`、`cancelled → running` 等非法迁移被拒绝。重生成允许 `completed → partially_failed` / `partially_failed → completed`。
+- **管线**：示例批次调用四个核心 Agent（覆盖 6 张）但只渲染第 1 张；全套批次读取示例批次四类 `agent_runs.output_full`，不重复调用核心 Agent，串行生成 2~6；单张重试只走生图及后续。每个阶段更新 `generation_batches.stage`；取消/超时在每个检查点读取最新状态。
+- **失败策略**：核心 Agent 10 次失败 → 批次 failed；生图 2 次失败 → 批次立即 failed，后续 pending 置「批次已失败，未生成」；非核心 Agent 10 次失败 → skipped 并继续；非生图单张失败 → 该张 failed，批次最后按成功数汇总；整批 30 分钟超时，`BATCH_TIMEOUT_SECONDS` 可缩短。
+- **重试/重生成**：事务内加锁，复制原图提示词/角色/序号，`attempt_no+1`，旧图 `superseded`；同批次只允许一个 generating 重试；`completed_count` 按当前非 superseded 成功图重算。
+- **ZIP**：临时文件 + `FileResponse` 流式返回；manifest 用 UTF-8 BOM、中文表头；只包含当前成功正式图；部分失败仍可下载。
+- **已注意的兼容取舍**：宽高校验改为 512~2048 且 8 的倍数，但超过 4096 仍返回既有 10004，避免破坏 2 号 demo 的错误码断言；其余越界返回 10003。现有测试全部保留并通过。
+- **测试**：生成链路统一用 `FakeGateway`；故障注入 `GENERATION_FAULT_MODE`（core/image/quality/platform/moderation/timeout）仅 `APP_ENV=test` 生效；测试退避缩放为 0。
+- **已知外部阻塞**：Seedream 5.0 Pro 已开通但账号「安全体验模式」额度用尽（429 SetLimitExceeded），真实全链路验收待用户调整额度。

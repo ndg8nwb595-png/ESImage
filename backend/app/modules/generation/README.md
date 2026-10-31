@@ -32,7 +32,7 @@
 ## 依赖与边界
 
 - 数据表复用 `app/models/workspace.py` 中已有的 `generation_batches`、
-  `generated_images`、`agent_runs`；新增生成配置表放在 `app/models/generation.py`。
+  `generated_images`、`agent_runs`；生成配置表复用 `app/models/config.py`。
 - 生成配置只做读取与种子，不做后台 CRUD。
 - 异步任务沿用 FastAPI `BackgroundTasks` + PostgreSQL 轮询，单实例；不接 Celery / Redis。
 - 对象存储沿用本地目录适配层，不接 MinIO。
@@ -58,8 +58,16 @@
 ## 状态
 
 - [x] 模块骨架与目录
-- [ ] 数据模型与配置种子
-- [ ] Agent 运行时与豆包适配层
-- [ ] 文字合成
-- [ ] 示例批次 / 全套批次 / 取消 / 重试 / ZIP
-- [ ] curl 验收
+- [x] 数据模型与配置种子
+- [x] Agent 运行时与豆包适配层
+- [x] 文字合成
+- [x] 示例批次 / 全套批次 / 取消 / 重试 / ZIP
+- [x] pytest（确定性模型替身）
+- [x] curl 验收脚本（`backend/scripts/curl_smoke_generation.sh`）
+- [ ] 真实 Seedream 全链路验收（等待账号额度调整）
+
+## 模型
+
+- 文本：`doubao-seed-character-260628`
+- 视觉/审核：`doubao-seed-2-1-lite-260915`
+- 生图：`doubao-seedream-5-0-pro-260628`（需在方舟控制台开通并调整体验额度）

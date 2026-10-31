@@ -25,6 +25,17 @@ backend/.curl_tmp/
 backend/.curl_admin_tmp/
 backend/.curl_contract_tmp/
 backend/.curl_tmp_admin7/
+backend/.curl_generation_tmp/
+backend/.uvicorn_*.log
+backend/.uvicorn_*.pid
+backend/.pytest_*.log
+backend/.probe_image.png
+backend/.curl_thumb.webp
+backend/.curl_thumb_headers.txt
+backend/.r*.json
+backend/.req_*.json
+backend/.real_*.json
+backend/.templates.json
 
 # 日志与临时文件
 *.log

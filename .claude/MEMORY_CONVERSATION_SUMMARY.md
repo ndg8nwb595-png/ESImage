@@ -322,4 +322,14 @@
 - 用户要求「记忆文件也要推」：将五个 `.claude/MEMORY_*.md` 作为独立文档提交并推送到 `main`。
 - 用户要求「帮我填 .env」：根目录 `.env` 原先只有 `GITHUBTOKEN`，按根 `.env.example` 补齐 compose 所需变量；保留原有 `GITHUBTOKEN`，未打印其值。
 - 生成项：`SECRET_KEY`、`JWT_SECRET`、32 字节 Base64 `ENCRYPTION_KEY`、初始超管密码均为随机值；初始超管用户名 `admin`；MinIO 使用 compose 内网地址 `minio:9000`。
-- 根 `.env` 已被 `.gitignore` 忽略；`docker compose config -q` 通过。`backend/.env` 此前已完整，本次未改动。
+- 根 `.env` 已被 `.gitignore` 忽略；`docker compose config -q` 通过。`backend/.env` 此前已完整，本次未改动。- 下一步：推送功能分支并快进合并 `main`。- chrome-devtools MCP 已验证 `/api/docs` Swagger UI（admin-accounts 11 个接口、admin-audit 2 个接口，控制台无错误）；冒烟脚本就绪探测修正为 `/api/openapi.json`。- 未做：生图模块（4 号，模型 `doubao-seedream-5-0-pro-260628`）；管理端聊天记录查询（8 号）。## 2026-10-31 会话 16：生图任务与结果后端最小 demo 实现
+
+- 用户要求：连 chrome-devtools MCP；找到合适位置建模块文件夹；开发 `docs/prd/4-生图任务与结果` 的后端；新建分支，先把模块骨架 push 到分支再合并 `main`，然后完成开发，确保每个接口可用 curl 调通；同设备有并行 agent，调试时复用其进程（尤其 Docker）。
+- 环境：`chrome-devtools` MCP 的浏览器 profile 被其他 agent 占用（提示 browser already running），本次纯后端 + curl，不依赖浏览器。复用并行 agent 的 `esimage-postgres`（55433），新建独立库 `esimage_generation` / `esimage_generation_test`，未触碰 `esimage` 库；8000 端口属于 1 号 demo，本次用 8010/8011。
+- 分支：`feat/generation-backend-demo`；骨架 README 提交 `419aece`，rebase 到并行 agent 推进后的 `origin/main` 后为 `8c88c0e`，已 push 并 `--ff-only` 合并 `main`。
+- 实现：新增 `app/models/generation.py`（模板/素材/模型配置/系统提示词/提示词版本/尺寸）、`app/modules/generation/`（配置路由、生成路由、服务、配置缓存、豆包适配层、8 Agent 运行时、文字合成、三条管线、ZIP、种子）；`GeneratedImage` 增加内部幂等列 `client_request_id`；`workspace` 只保留会话/聊天/上传，生成接口由 `generation` 接管。
+- 验证：`TEST_DB_NAME=esimage_generation_test python -m pytest` 全量 **75 passed**；`scripts/curl_smoke_generation.sh` 在确定性测试替身下逐条调通全部接口（示例、确认、预览、单张/ZIP、重生成、取消、权限隔离）。
+- 真实模型探测：文本 `doubao-seed-character-260628` 与视觉/审核 `doubao-seed-2-1-lite-260915` 调用成功；真实示例批次跑通规划→商品理解→文案→提示词，生图阶段失败。
+- 生图模型：`doubao-seedream-4-0-250828` 无权限；用户随后开通 `doubao-seedream-5-0-pro-260628`。首次调用因 `sequential_image_generation` 参数 400，已改为只发送各版本通用最小参数；再次调用返回 429 `SetLimitExceeded`（账号安全体验模式额度用尽）。
+- 当前阻塞：需用户在方舟控制台调整/关闭「安全体验模式」或调整额度，之后补跑真实全链路 curl；真实通过后再提交开发代码并合并 `main`。
+- 说明：`.env` 中的 Key 使用 `ARK_API_KEY`，代码同时兼容 `DOUBAO_API_KEY`；模型名默认值已同步 `.env.example` 与配置。

@@ -222,6 +222,8 @@ class GeneratedImage(Base):
     index_no: Mapped[int] = mapped_column(Integer, nullable=False)
     attempt_no: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default=text("'pending'"))
+    # 单张重试/重生成幂等键（4 号 demo 增量字段，10 号文档未列出，仅内部使用）
+    client_request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     source_image_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     file_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     thumbnail_path: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -256,6 +258,12 @@ class GeneratedImage(Base):
         Index("idx_images_user_history", "user_id", "is_history_visible", "created_at"),
         Index("idx_images_status", "status"),
         Index("idx_images_archived_at", "archived_at"),
+        Index(
+            "uq_images_client_request",
+            "client_request_id",
+            unique=True,
+            postgresql_where=text("client_request_id IS NOT NULL"),
+        ),
     )
 
 

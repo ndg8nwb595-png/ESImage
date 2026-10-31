@@ -383,4 +383,31 @@
 | 推送记忆文件 | 完成 | 五个 `.claude/MEMORY_*.md` 独立提交并推送 `main` |
 | 补齐根 `.env` | 完成 | 按根 `.env.example` 补齐 31 个 compose 变量，保留原 `GITHUBTOKEN`；随机生成密钥与初始超管密码 |
 | 配置校验 | 完成 | `docker compose config -q` 通过；`.env` 被 `.gitignore` 忽略，未入库 |
-| 后端本地配置 | 无需改动 | `backend/.env` 已包含宿主机启动所需全部键，本次未改 |
+| 后端本地配置 | 无需改动 | `backend/.env` 已包含宿主机启动所需全部键，本次未改 || 既有缺陷修复 | 完成 | `admin/router.py` 显式导入子模块 `APIRouter`；管理后台路由补 `/admin` 前缀 || 待用户裁决 | 待确认 | 种子计数口径（21 可见 vs 文档“21 completed + partial”）；manifest 宽度/高度分列与 4 号“尺寸”单列差异 |- 已确认范围：只做后端；重命名、软删除、消息状态、轻链路、上下文、需求摘要、需求变化提示、`agent_runs` 明细。
+- 明确不做：`POST /sessions`、会话恢复、取消接口、`agent_runs` 查询、消息搜索/导出、管理端聊天、聊天触发生图、真实内容审核；生图 `doubao-seedream-5-0-pro-260628` 属于 4 号，3 号不调用。
+- 环境：复用 docker `esimage-postgres`（55433）；8001 跑 3 号服务；chrome-devtools MCP 已验证 Swagger UI 与 OpenAPI。## 2026-10-31 会话 16：4 号生图任务与结果后端最小 demo（代码实现）
+
+| 需求 | 状态 | 实现手段 |
+| --- | --- | --- |
+| 模块目录与骨架 | 完成 | `backend/app/modules/generation/`；先推分支再合并 main |
+| 生成数据模型 | 完成 | 复用 `generation_batches/generated_images/agent_runs`；新增 `templates/material_assets/model_configs/system_prompts/prompt_versions/size_presets` |
+| 8 条系统提示词与种子 | 完成 | `generation/seed.py`，幂等；2 模板、4 素材、4 尺寸、1 模型配置 |
+| 只读配置接口 | 完成 | `GET /templates`、`/templates/{id}/thumbnail`、`/sizes`；60 秒缓存 + 手动刷新 |
+| 豆包适配层 | 完成 | 文本/视觉 `chat/completions`、生图 `images/generations`、生成图审核（视觉模型结构化判定）；Key 支持 `ARK_API_KEY` |
+| 8 Agent 运行时 | 完成 | 结构化输出校验、10 次指数退避、每次尝试写 `agent_runs`、跳过写 `skipped` |
+| 文字留白合成 | 完成 | Pillow + 默认版式；标题上方 15%、卖点下方 20%、边距 8%；缩字号/截断/半透明白底 |
+| 示例批次真实全链路 | 完成（真实生图待额度） | 规划→商品理解→文案→提示词→生图→审核→质量→修复→规范→合成 |
+| 确认全套与详情图 | 完成（真实生图待额度） | 复用示例图与四类核心 Agent 输出，串行生成 2~6 |
+| 失败重试与降级 | 完成 | 核心失败批次 failed、生图 2 次失败立即 failed、非核心跳过、非生图单张失败继续、30 分钟超时、测试故障注入 |
+| 取消任务 | 完成 | 行锁 + 状态机；pending 置 cancelled、成功图不进历史、重复取消幂等 |
+| 单张重试/重生成 | 完成 | 新记录 attempt+1、旧图 superseded、`completed_count` 重算、单批次单重试 |
+| 整组 ZIP + manifest | 完成 | 临时文件流式返回；UTF-8 BOM CSV；部分失败仍可下载成功图 |
+| curl 验收 | 完成（替身）；真实待额度 | `scripts/curl_smoke_generation.sh` 覆盖全部接口；真实示例批次已跑通四个核心 Agent |
+| pytest | 完成 | 75 passed；生成链路使用确定性替身，不访问外网 |
+| 真实 Seedream 验收 | 阻塞 | 账号安全体验模式额度用尽（429 SetLimitExceeded），待用户在控制台调整 |
+
+### 明确不做
+
+- 模板/素材/尺寸/提示词/模型配置的后台 CRUD（只读 + 种子）。
+- 上传图内容审核、历史作品页、个人中心、管理后台页面。
+- Celery/Redis/MinIO/Alembic；多实例与批次级重新生成。

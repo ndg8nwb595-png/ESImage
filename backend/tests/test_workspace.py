@@ -153,7 +153,9 @@ def clean_workspace():
         db.execute(delete(CreativeSession))
         db.commit()
 
-    shutil.rmtree(settings.STORAGE_ROOT, ignore_errors=True)
+    # 只清理用户产物，保留模板/素材种子文件，避免影响生成链路测试
+    for subdir in ("uploads", "generated", "thumbnails"):
+        shutil.rmtree(settings.STORAGE_ROOT / subdir, ignore_errors=True)
     settings.STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
     yield
 

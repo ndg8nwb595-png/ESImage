@@ -26,6 +26,7 @@ from app.modules.admin.chat_records.seed import seed_chat_records
 from app.modules.admin.seed import seed_config
 from app.modules.admin.seed_content import seed_admin_content
 from app.modules.auth.seed import seed
+from app.modules.generation.seed import seed_generation_config
 from app.modules.history.seed import seed_history
 
 
@@ -35,6 +36,8 @@ def main() -> None:
     with SessionLocal() as db:
         seed(db)
         seed_config(db)
+        # 4 号：补齐详细系统提示词、模板/素材、真实模型名（覆盖演示占位）
+        seed_generation_config(db)
         # 8 号聊天记录演示夹具；按 (user_id, title) 幂等
         seed_chat_records(db)
         # 历史作品最小 demo 夹具；重复执行时按 client_request_id 跳过

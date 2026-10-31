@@ -1218,4 +1218,56 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 
 - `docker compose config -q`：通过。
 - `git check-ignore -v .env`：命中 `.gitignore` 第 2 行，确认不会提交。
-- 根 `.env` 键数量：32（含保留的 `GITHUBTOKEN`）。
+- 根 `.env` 键数量：32（含保留的 `GITHUBTOKEN`）。- 恢复验证：容器 healthy；`esimage` 库 public schema **18 张表、4 个用户**；旧卷保留未删除。10. 冒烟脚本就绪探测从 `/openapi.json` 改为 `/api/openapi.json` 并加 `-f`（9 号契约迁移后旧路径 404，curl 仍返回 0 会误判）。- `.smoke/` 为临时 curl 产物，已删除并加入 `.gitignore`；`backend/.env` 含真实 Key，已被 `.gitignore` 忽略，禁止提交。## 2026-10-31 会话 16：生图任务与结果后端最小 demo
+
+### 新增文件
+
+- `backend/app/models/generation.py`：模板、素材、模型配置、系统提示词、提示词版本、尺寸预设。
+- `backend/app/core/storage.py`：跨模块本地存储适配层。
+- `backend/app/core/media.py`：缩略图、PNG 编码、尺寸缩放。
+- `backend/app/modules/generation/README.md`
+- `backend/app/modules/generation/__init__.py`
+- `backend/app/modules/generation/router.py`
+- `backend/app/modules/generation/config_router.py`
+- `backend/app/modules/generation/generation_router.py`
+- `backend/app/modules/generation/schemas.py`
+- `backend/app/modules/generation/service.py`
+- `backend/app/modules/generation/config_service.py`
+- `backend/app/modules/generation/doubao.py`
+- `backend/app/modules/generation/agents.py`
+- `backend/app/modules/generation/composition.py`
+- `backend/app/modules/generation/state.py`
+- `backend/app/modules/generation/pipeline.py`
+- `backend/app/modules/generation/zip_export.py`
+- `backend/app/modules/generation/seed.py`
+- `backend/scripts/curl_smoke_generation.sh`
+- `backend/tests/test_generation.py`
+- `backend/tests/test_generation_units.py`
+
+### 修改文件
+
+- `backend/app/main.py`：注册 generation 路由；lifespan 启动校验模型 Key 与中文字体。
+- `backend/app/core/config.py`：新增 ARK_API_KEY/DOUBAO_*、BATCH_TIMEOUT_SECONDS、FONT_PATH、APP_ENV、GENERATION_MODEL_PROVIDER、故障注入与退避缩放。
+- `backend/app/models/workspace.py`：`generated_images` 增加内部幂等列 `client_request_id` 与部分唯一索引。
+- `backend/app/models/__init__.py`：注册新模型。
+- `backend/app/modules/workspace/router.py`：移除 generations 路由，仅保留 sessions/uploads。
+- `backend/app/modules/workspace/README.md`：更新模块边界。
+- 删除 `backend/app/modules/workspace/generations.py`、`backend/app/modules/workspace/pipeline.py`（由 generation 接管）。
+- `backend/scripts/seed.py`：追加 `seed_generation_config`。
+- `backend/tests/conftest.py`：测试环境 fake 模型、退避为 0、种子生成配置。
+- `backend/tests/test_workspace.py`：清理存储时只删用户产物，保留模板/素材种子文件。
+- `backend/.env.example`、`backend/README.md`、`backend/app/modules/generation/README.md`：环境变量、接口、模型与限制说明。
+
+### 验证记录
+
+- `python -m compileall -q app scripts`：通过。
+- `TEST_DB_NAME=esimage_generation_test python -m pytest`：**75 passed**。
+- `APP_ENV=test GENERATION_MODEL_PROVIDER=fake AGENT_RETRY_BACKOFF_SCALE=0 bash scripts/curl_smoke_generation.sh`：**全部接口通过**（模板/缩略图/尺寸、上传、示例、重新生成示例、旧示例拒绝、确认全套、单张下载、ZIP+manifest、重生成、取消幂等、权限隔离）。
+- 真实服务 `127.0.0.1:8010`：登录、模板、尺寸、缩略图、管理员 403、商品名空 400、模板不存在 404、尺寸非 8 倍数 400 均通过。
+- 真实示例批次：planner/product_understanding/copywriter/prompt_builder 成功（agent_runs 记录 token/耗时），生图阶段因模型未开通失败；开通 5.0 Pro 后因安全体验额度返回 429。
+- 真实模型探测：文本 `doubao-seed-character-260628`、视觉/审核 `doubao-seed-2-1-lite-260915` 正常。
+
+### 待办
+
+- 用户在方舟控制台调整/关闭「安全体验模式」后，重跑 `bash scripts/curl_smoke_generation.sh` 完成真实全链路验收。
+- 真实验收通过后提交开发代码、push 分支并合并 `main`。

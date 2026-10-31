@@ -110,6 +110,45 @@ class Settings:
             or os.getenv("ENCRYPTION_KEY", "").strip()
         )
 
+        # 4 号生图任务：豆包模型配置。
+        # Key 只从环境变量读取，不落库；ARK_* 是 3/4 号共享命名，DOUBAO_* 可覆盖。
+        self.DOUBAO_API_KEY = os.getenv("DOUBAO_API_KEY", "").strip() or self.ARK_API_KEY
+        self.DOUBAO_BASE_URL = (
+            os.getenv("DOUBAO_BASE_URL", "").strip() or self.ARK_BASE_URL
+        )
+        self.DOUBAO_TEXT_MODEL = (
+            os.getenv("DOUBAO_TEXT_MODEL", "").strip() or self.ARK_TEXT_MODEL
+        )
+        self.DOUBAO_IMAGE_MODEL = os.getenv(
+            "DOUBAO_IMAGE_MODEL", "doubao-seedream-5-0-pro-260628"
+        ).strip()
+        self.DOUBAO_VISION_MODEL = os.getenv(
+            "DOUBAO_VISION_MODEL", "doubao-seed-2-1-lite-260915"
+        ).strip()
+        self.DOUBAO_MODERATION_MODEL = os.getenv(
+            "DOUBAO_MODERATION_MODEL", "doubao-seed-2-1-lite-260915"
+        ).strip()
+
+        # 整批超时秒数（默认 30 分钟；演示可用短阈值）
+        self.BATCH_TIMEOUT_SECONDS = int(os.getenv("BATCH_TIMEOUT_SECONDS", "1800"))
+
+        # 中文字体路径；为空时按内置候选列表查找
+        self.FONT_PATH = os.getenv("FONT_PATH", "").strip()
+
+        # 模型提供方：doubao（默认）/ fake（仅测试环境）
+        self.GENERATION_MODEL_PROVIDER = os.getenv(
+            "GENERATION_MODEL_PROVIDER", "doubao"
+        ).strip()
+
+        # 测试环境退避缩放系数；生产固定为 1
+        self.AGENT_RETRY_BACKOFF_SCALE = float(
+            os.getenv("AGENT_RETRY_BACKOFF_SCALE", "1")
+        )
+
+        # 故障注入（仅 APP_ENV=test 生效），逗号分隔：
+        # core / image / quality / platform / composition / timeout / moderation
+        self.GENERATION_FAULT_MODE = os.getenv("GENERATION_FAULT_MODE", "").strip()
+
         if not self.JWT_SECRET:
             raise RuntimeError(
                 "缺少 JWT_SECRET 环境变量。请复制 backend/.env.example 为 backend/.env 并设置随机密钥。"

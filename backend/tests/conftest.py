@@ -40,6 +40,16 @@ os.environ.setdefault(
     "STORAGE_ROOT",
     str(Path(__file__).resolve().parent.parent / ".pytest_storage"),
 )
+# 生成链路测试统一使用确定性模型替身，不访问真实豆包
+os.environ.setdefault("APP_ENV", "test")
+os.environ.setdefault("GENERATION_MODEL_PROVIDER", "fake")
+os.environ.setdefault("AGENT_RETRY_BACKOFF_SCALE", "0")
+os.environ.setdefault("DOUBAO_API_KEY", "test-key")
+os.environ.setdefault("DOUBAO_BASE_URL", "https://example.invalid/api/v3")
+os.environ.setdefault("DOUBAO_TEXT_MODEL", "test-text-model")
+os.environ.setdefault("DOUBAO_IMAGE_MODEL", "test-image-model")
+os.environ.setdefault("DOUBAO_MODERATION_MODEL", "test-moderation-model")
+os.environ.setdefault("DOUBAO_VISION_MODEL", "test-vision-model")
 
 import pytest  # noqa: E402
 from sqlalchemy import create_engine, delete, select, text  # noqa: E402
@@ -69,12 +79,14 @@ def prepared_database():
     from app import models  # noqa: F401  注册模型
     from app.core.database import Base, SessionLocal, engine
     from app.modules.auth.seed import seed
+    from app.modules.generation.seed import seed_generation_config
 
     print("[测试] 重建测试表结构……")
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         seed(db)
+        seed_generation_config(db)
     print("[测试] 测试数据库就绪。")
     yield
 
