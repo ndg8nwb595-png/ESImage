@@ -240,7 +240,7 @@ templates / material_assets / size_presets（被批次快照引用或独立配�
 - `ck_messages_role`：`role IN ('user','assistant','system')`。
 - `ck_messages_status`：`status IN ('sending','done','failed')`。
 - `uq_messages_session_client`：`UNIQUE (session_id, client_message_id)`（部分索引，`client_message_id IS NOT NULL`）。
-- 首条消息建会话使用 Redis 短期幂等键 `(user_id, client_message_id)` 去重，避免并发创建两个会话。
+- 首条消息建会话使用 Redis 短期幂等键（TTL 60 秒）`(user_id, client_message_id)` 去重，避免并发创建两个会话。
 - `idx_messages_session_time`：`(session_id, created_at)`。
 - `idx_messages_created_at`：`(created_at DESC)`。
 - 可选 `idx_messages_content_trgm`：`GIN (content gin_trgm_ops)`，用于关键词搜索。
@@ -648,6 +648,13 @@ templates / material_assets / size_presets（被批次快照引用或独立配�
 - 导出 ZIP 存于 `exports/`，有效期 24 小时。
 - 定时任务清理过期文件与 Redis 中的任务状态。
 - 清理任务记录审计日志（可选）。
+
+### 7.5 孤儿上传清理
+
+- 调度：每日 04:00（Asia/Shanghai）。
+- 扫描 `uploaded_assets` 中 `status='active'`、`session_id IS NULL`、`created_at < now() - 30 days` 且未被任何批次的 `params_snapshot` 引用的记录。
+- 将该记录置为 `deleted`，并删除 MinIO 原件与缩略图对象。
+- 记录任务日志：扫描数、清理数、失败数、耗时；失败记录重试。
 
 ---
 

@@ -247,3 +247,95 @@
 - `AGENTS.md` 的 Domain docs 行改为“单上下文（single-context）布局”；`Domain glossary` 小节保留。
 - 用 `gh label list` 校验五个 triage 标签全部存在，无需新建。
 - 未运行代码或测试；未 commit。
+
+## 2026-10-31 会话 5：登录最小 demo 文档拆解（to-tickets）
+
+### 移动文件
+
+1. `docs/prd/1-登录界面prd.md` → `docs/prd/1-登录界面/1-登录界面prd.md`（用户确认）。
+
+### 修改文件
+
+1. `docs/prd/0-系统汇总prd.md` 第 121 行索引路径改为 `1-登录界面/1-登录界面prd.md`。
+2. `docs/prd/6-管理后台-账号与权限prd.md` 第 11 行关联文档路径同步。
+
+### 新增文件
+
+1. `docs/prd/1-登录界面/README.md` —— 最小 demo 范围、演示账号、依赖图、验收口径、取舍与待确认项。
+2. `docs/prd/1-登录界面/接口文档-登录最小demo.md` —— 3 个 auth 接口、JWT 规范、错误码、前端处理、审计约定、已知限制。
+3. `docs/prd/1-登录界面/issues/01-工程骨架与演示账号.md`
+4. `docs/prd/1-登录界面/issues/02-登录接口与登录页闭环.md`
+5. `docs/prd/1-登录界面/issues/03-登录态恢复与路由守卫.md`
+6. `docs/prd/1-登录界面/issues/04-角色分流与双角色切换.md`
+7. `docs/prd/1-登录界面/issues/05-账号状态即时失效.md`
+8. `docs/prd/1-登录界面/issues/06-退出登录与审计.md`
+
+### 验证
+
+- `find docs/prd/1-登录界面 -type f` 确认 9 个文件（PRD + README + 接口文档 + 6 tickets）齐全。
+- `grep -rn "1-登录界面prd.md" docs` 确认旧顶层路径无残留；0/6 号引用已指向新路径。
+- 未运行代码或测试，未 commit。
+- 未创建 GitHub issue（用户要求输出到新文件夹，tickets 采用本地文件模板）。
+
+## 2026-10-31 会话 6：创作工作台最小 demo 文档拆解（to-tickets）
+
+### 移动文件
+
+1. `docs/prd/2-用户端创作工作台prd.md` → `docs/prd/2-用户端创作工作台/2-用户端创作工作台prd.md`（用户要求单独建文件夹）。
+
+### 修改文件
+
+1. `docs/prd/0-系统汇总prd.md` 第 122 行索引路径改为 `2-用户端创作工作台/2-用户端创作工作台prd.md`。
+2. `docs/prd/3-Agent会话交互/3-Agent会话交互prd.md` 第 11 行关联文档路径同步。
+3. `docs/prd/4-生图任务与结果prd.md` 第 11 行关联文档、第 564 行引用路径同步。
+4. `docs/prd/5-历史作品prd.md` 第 11 行关联文档路径同步。
+
+### 新增文件
+
+1. `docs/prd/2-用户端创作工作台/README.md` —— 最小 demo 范围、演示账号、依赖图、ticket 表、验收脚本、取舍与待确认项。
+2. `docs/prd/2-用户端创作工作台/接口文档-创作工作台最小demo.md` —— 通用约定、权限、分页、幂等、并发、SSE、会话/上传/生成/确认/预览/下载接口、数据结构、状态机、错误码、与 PRD 9 差异、未实现接口、验收调用序列与 curl 示例。
+3. `docs/prd/2-用户端创作工作台/issues/01-工作台骨架与最小数据表.md`
+4. `docs/prd/2-用户端创作工作台/issues/02-参数面板与商品名称校验.md`
+5. `docs/prd/2-用户端创作工作台/issues/03-商品图上传与恢复.md`
+6. `docs/prd/2-用户端创作工作台/issues/04-会话列表与聊天轻链路.md`
+7. `docs/prd/2-用户端创作工作台/issues/05-生成示例图与阶段进度.md`
+8. `docs/prd/2-用户端创作工作台/issues/06-确认并生成全套与结果网格.md`
+9. `docs/prd/2-用户端创作工作台/issues/07-结果预览与单张下载.md`
+
+### 验证
+
+- `find docs/prd/2-用户端创作工作台 -type f` 确认 10 个文件（PRD + README + 接口文档 + 7 tickets）齐全。
+- `grep -rn "2-用户端创作工作台prd" docs` 确认外部旧路径无残留；仅文件夹内 README/接口文档以相对名引用。
+- 修正接口文档聊天 `params` 误带 `upload_ids` 的问题；`upload_ids` 仅保留在生成示例请求中。
+- 修正 `30016` HTTP 状态为 404，与 PRD 9 一致。
+- 修正全套批次 JSON 示例缺省说明、确认幂等返回口径，并补充与 PRD 9 的差异说明。
+- 未运行代码或测试，未 commit，未创建 GitHub issue（tickets 为本地文件）。
+
+## 2026-10-31 会话 7：Agent 会话交互最小 demo 文档拆解（to-tickets）
+
+### 移动文件
+
+1. `docs/prd/3-Agent会话交互prd.md` → `docs/prd/3-Agent会话交互/3-Agent会话交互prd.md`（用户要求单独建文件夹；使用 `git mv` 保留历史）。
+
+### 修改文件
+
+1. `docs/prd/0-系统汇总prd.md` 第 123 行索引路径改为 `3-Agent会话交互/3-Agent会话交互prd.md`。
+2. `docs/prd/2-用户端创作工作台/2-用户端创作工作台prd.md` 关联文档与第 10 章引用改为 `../3-Agent会话交互/3-Agent会话交互prd.md`。
+3. `docs/prd/2-用户端创作工作台/接口文档-创作工作台最小demo.md` 上游依据路径同步。
+4. `docs/prd/4-生图任务与结果prd.md` 关联文档路径同步。
+5. `docs/prd/8-管理后台-聊天记录prd.md` 关联文档路径同步。
+
+### 新增文件
+
+1. `docs/prd/3-Agent会话交互/README.md` —— 最小 demo 范围、前置、接口总览、依赖图、验收脚本、取舍与待确认项。
+2. `docs/prd/3-Agent会话交互/接口文档-Agent会话交互最小demo.md` —— 通用约定、增量接口（重命名/软删除）、消息分页与超时、聊天 SSE 事件与字段、需求摘要、`requirement_changed`、幂等重放、断线重连、错误码、与 2/9/10 号差异、待确认项。
+3. `docs/prd/3-Agent会话交互/issues/01-会话重命名与软删除.md`
+4. `docs/prd/3-Agent会话交互/issues/02-消息展示与输入规则.md`
+5. `docs/prd/3-Agent会话交互/issues/03-轻链路编排与上下文.md`
+6. `docs/prd/3-Agent会话交互/issues/04-需求变化提示与生图衔接.md`
+
+### 验证
+
+- `find docs/prd/3-Agent会话交互 -type f` 确认 7 个文件（PRD + README + 接口文档 + 4 tickets）齐全。
+- `grep -rn "3-Agent会话交互prd" docs` 确认外部旧路径无残留；仅新文件夹内以相对文件名引用。
+- 未运行代码或测试，未 commit，未创建 GitHub issue（tickets 为本地文件）。

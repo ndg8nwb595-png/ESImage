@@ -250,7 +250,7 @@ Authorization: Bearer <jwt>
 | 鉴权 | `user.generate` |
 | 请求 | `multipart/form-data`，字段 `file` |
 | 响应 | `{ upload_id, file_url, thumbnail_url, width, height, size_bytes }` |
-| 限制 | JPG/PNG/WEBP；≤10MB；每个会话最多 5 张 |
+| 限制 | JPG/PNG/WEBP；≤10MB；该用户「未绑定会话且 `active`」的上传总数 ≤5 张，绑定会话后释放名额 |
 | 错误 | 30006 |
 
 | 方法/路径 | 权限 | 说明 |
@@ -598,7 +598,7 @@ Content-Type: application/json
 | `meta` | `{ message_id, session_id }` | 连接建立 |
 | `agent_status` | `{ agent_code, status }` | `started` / `finished` / `skipped` |
 | `delta` | `{ content }` | 增量文本 |
-| `done` | `{ message_id, token_in, token_out, requirement_summary }` | 完成 |
+| `done` | `{ message_id, token_in, token_out, requirement_summary, requirement_changed }` | 完成 |
 | `error` | `{ code, message }` | 错误 |
 | `ping` | `{}` | 心跳，15 秒 |
 
