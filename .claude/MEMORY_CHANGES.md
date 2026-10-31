@@ -1171,3 +1171,51 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 - 合并后全量 `pytest`：仍仅 2 个既有 `test_ops` 失败。
 - 用户选择 Postgres 恢复方案 C：停止 `esimage-postgres`，清空新卷 `esimage_pgdata`，用临时容器把旧卷 `esimage_esimage_pgdata` 完整复制到新卷，再启动容器。
 - 恢复验证：容器 healthy；`esimage` 库 public schema **18 张表、4 个用户**；旧卷保留未删除。
+
+## 2026-11-01 会话 19：修复 `tests/test_ops.py` 两个过期用例
+
+### 一、改动内容
+
+- `backend/tests/test_ops.py::test_request_id_invalid_regenerated`：
+  - 原值 `"bad id!超长..."` 含中文，httpx2 在构造请求头时按 ASCII 编码抛 `UnicodeEncodeError`，测试未到达中间件。
+  - 改为 ASCII 非法值 `"bad id!"`；空格与感叹号都不匹配 `^[A-Za-z0-9_-]{8,64}$`，仍然验证“非法入站 ID 被替换为合法新 ID”。
+  - 增加中文注释说明为什么不能使用中文头值。
+- `backend/tests/test_ops.py::test_selftest_pure`：
+  - 删除 `monkeypatch.setattr(ops_tasks, "delay_ms", 0)`；`app/tasks/ops.py` 没有模块级 `delay_ms`，该函数签名是 `selftest(request_id=None, delay_ms=0)`。
+  - 同步删除已无用的 `monkeypatch` 参数。
+- 未改动任何生产代码，未改变接口、数据或边界行为。
+
+### 二、验证
+
+- 修改前 `python -m pytest tests/test_ops.py -q`：2 failed（`UnicodeEncodeError`、`AttributeError: ... delay_ms`）。
+- 修改后 `python -m pytest tests/test_ops.py`：**22 passed in 6.63s**。
+- 全量 `python -m pytest`：**192 passed, 2 skipped in 93.42s**；2 skipped 为需显式 `MINIO_TEST_ENDPOINT` 的真实 MinIO 集成测试。
+- 分支 `fix/test-ops-stale-cases`，提交 `c7b5b01`；已推送，`main` 以 `--ff-only` 从 `c8f073e` 快进到 `c7b5b01` 并推送。
+- 提交拆分说明：首次推送时安全策略拦截了含内部记忆文档的提交，因此先仅提交 `backend/tests/test_ops.py`；随后按用户明确要求，将五个 `.claude/MEMORY_*.md` 作为独立文档提交并推送。
+
+## 2026-11-01 会话 20：推送记忆文件与补齐根 `.env`
+
+### 一、记忆文件推送
+
+- 用户明确要求「记忆文件也要推」。
+- 将 `.claude/MEMORY_ARCHITECTURE.md`、`MEMORY_CHANGES.md`、`MEMORY_CONVERSATION_SUMMARY.md`、`MEMORY_REQUIREMENTS.md`、`MEMORY_TIPS.md` 作为独立文档提交并推送到 `main`。
+
+### 二、根目录 `.env`
+
+- 现状：根 `.env` 原仅含 `GITHUBTOKEN` 一行，compose 的 `env_file`/插值缺少配置。
+- 处理：在保留原 `GITHUBTOKEN` 的前提下，按根 `.env.example` 追加 31 个键，未覆盖或打印原 token。
+- 关键值：
+  - `APP_ENV=development`、`TZ=Asia/Shanghai`；
+  - `DATABASE_URL=postgresql+psycopg://esimage:esimage@postgres:5432/esimage`；
+  - `REDIS_URL=redis://redis:6379/0`；
+  - `STORAGE_BACKEND=minio`、`MINIO_ENDPOINT=minio:9000`、`MINIO_BUCKET=esimage`；
+  - `SECRET_KEY`、`JWT_SECRET`、`ENCRYPTION_KEY`（32 字节 Base64）、`ADMIN_INITIAL_PASSWORD` 均为随机生成；
+  - `ADMIN_INITIAL_USERNAME=admin`，密码满足 ≥12 位、≥3 类字符；
+  - `ARK_API_KEY` 留空，待用户自行填入豆包密钥。
+- 未改动 `backend/.env`：它已包含宿主机 uvicorn 所需全部键。
+
+### 三、验证
+
+- `docker compose config -q`：通过。
+- `git check-ignore -v .env`：命中 `.gitignore` 第 2 行，确认不会提交。
+- 根 `.env` 键数量：32（含保留的 `GITHUBTOKEN`）。

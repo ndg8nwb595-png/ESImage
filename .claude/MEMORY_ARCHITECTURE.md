@@ -359,3 +359,17 @@
 - **本地 Docker 端口**：Redis 6379；MinIO API 9002、控制台 9003（避开并行项目的 9000/9001）；PostgreSQL 55433 保持不变。
 - **MinIO 初始化**：`minio-init` 复用 `minio/minio` 镜像内置 `mc`，不依赖 `minio/mc` 镜像；根密码必须 ≥8 位。
 - **Compose 卷风险**：本项目卷键为 `pgdata`，历史容器可能使用 `esimage_esimage_pgdata`；执行 `docker compose up` 前必须确认卷名，避免重建 Postgres 并切到空库。
+
+## 2026-11-01 测试用例维护共识
+
+- **过期测试单独修**：`test_ops.py` 两条失败属于测试自身过期，不夹带在生产功能提交中；使用独立分支与提交，便于回溯。
+- **HTTP 头测试值必须 ASCII**：httpx2 在发送前按 ASCII 编码头值；测试非法头时用空格/标点等 ASCII 字符，不要用中文制造“非法”。
+- **monkeypatch 只补真实存在的属性**：补丁目标必须与当前模块/函数签名一致；`selftest` 的延时是参数，不应再补模块级 `delay_ms`。
+
+## 2026-11-01 本地环境变量文件共识
+
+- **两份 `.env` 分工**：根 `.env` 供 Docker Compose 插值与容器 `env_file`；`backend/.env` 供宿主机 uvicorn 启动。两者都被 `.gitignore` 忽略，禁止提交。
+- **根 `.env` 只追加不覆盖**：该文件可能包含用户自己的 `GITHUBTOKEN`，补齐配置时必须保留原行且不得打印其值。
+- **Compose 内网地址**：根 `.env` 的 `DATABASE_URL`、`REDIS_URL`、`MINIO_ENDPOINT` 使用容器服务名（`postgres`、`redis`、`minio:9000`）；宿主机 `backend/.env` 使用 `127.0.0.1` 映射端口。
+- **密钥生成**：`SECRET_KEY`、`JWT_SECRET`、`ENCRYPTION_KEY`、初始超管密码使用随机值；`ENCRYPTION_KEY` 必须为 32 字节 Base64。
+- **验证方式**：改完根 `.env` 用 `docker compose config -q` 校验插值，不输出具体值；再用 `git check-ignore` 确认文件仍被忽略。

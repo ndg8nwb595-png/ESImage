@@ -209,3 +209,9 @@
 - **本地开发端口默认绑定 `127.0.0.1`**：`0.0.0.0` 会把无密码 Redis / 默认口令 MinIO 暴露到局域网。
 - **合并 main 后要重新检查启动必填项**：上游新增 `MODEL_CONFIG_ENCRYPTION_KEY` 后，旧 `.env` 会让应用启动失败；合并后先用 `python -c "import app.main"` 做启动冒烟，再补本地 `.env`。
 - **Docker 卷恢复优先“复制”而不是“改挂载”**：停止容器后把旧卷内容 `cp -a` 到当前卷，既能恢复旧数据又保留 compose 现有卷名；旧卷不要删除，作为回滚备份。
+- **HTTP 头测试值不能用中文**：httpx2 在客户端编码阶段就抛 `UnicodeEncodeError`，测试根本到不了中间件；用 ASCII 的空格/标点（如 `"bad id!"`）即可覆盖非法分支。
+- **monkeypatch 报 “has no attribute” 先看函数签名**：`selftest(request_id=None, delay_ms=0)` 的延时是参数；模块级补丁是旧实现残留，删补丁而不是给模块硬塞属性。
+- **测试修复也要先复现**：先跑目标用例确认失败原因与报告一致，再改测试；修完跑目标文件与全量，避免“看起来该过”的假绿。
+- **补齐根 `.env` 要保留用户自有变量**：本项目根 `.env` 还存有 `GITHUBTOKEN`；用追加而非重写，且不要 `cat` 出内容，避免 token 进入日志/对话。
+- **Compose 与宿主机地址不同**：根 `.env` 用服务名 `postgres/redis/minio:9000`，`backend/.env` 用宿主映射端口 `127.0.0.1:55433/6379/9002`；混用会连接失败。
+- **`docker compose config -q` 是 `.env` 的安全校验**：只返回退出码，不打印插值后的密钥；比 `docker compose config` 更适合含敏感值的环境。

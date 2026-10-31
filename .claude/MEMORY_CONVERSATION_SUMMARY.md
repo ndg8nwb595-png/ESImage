@@ -308,3 +308,18 @@
 - 用户选择 Postgres 恢复方案 C 并同意 push/merge：已把旧卷 `esimage_esimage_pgdata` 复制到新卷 `esimage_pgdata`，容器恢复 healthy，库内 18 张表、4 个用户；旧卷保留。
 - 已合并 `origin/main`（`3878e33`，8 号聊天记录）；冲突仅在记忆需求表与 `backend/.env.example`，保留双方内容，并为本地 `.env` 补充 `MODEL_CONFIG_ENCRYPTION_KEY`。合并后全量测试仍仅 2 个既有 `test_ops` 失败。
 - 已完成：推送 `feat/minio-storage-local`，并以 `--ff-only` 将 `main` 从 `3878e33` 快进到 `a21dc5a` 后推送；远端两个分支指向同一提交。
+
+## 2026-11-01 会话 19：单独修复 test_ops 两个过期用例
+
+- 用户确认「单独开一个处理」全量测试中仅剩的 2 条既有失败；从 `main`（`c8f073e`）新建分支 `fix/test-ops-stale-cases`。
+- 根因：`test_request_id_invalid_regenerated` 把中文放进 HTTP 头，httpx2 在发送前按 ASCII 编码即抛 `UnicodeEncodeError`，根本没走到中间件；`test_selftest_pure` 仍在 monkeypatch 模块级 `ops_tasks.delay_ms`，而 `selftest()` 早已把 `delay_ms` 改为函数参数。
+- 修复只动测试：非法头改用 ASCII `"bad id!"`（空格/感叹号均不匹配 `^[A-Za-z0-9_-]{8,64}$`）；删除无效 monkeypatch 与无用 `monkeypatch` 参数。
+- 验证：`tests/test_ops.py` 22 passed；全量 `pytest` 192 passed、2 skipped（MinIO 集成测试默认跳过）。
+- 状态：已推送 `fix/test-ops-stale-cases`，并以 `--ff-only` 将 `main` 从 `c8f073e` 快进到 `c7b5b01` 后推送。
+
+## 2026-11-01 会话 20：推送记忆文件与补齐根 `.env`
+
+- 用户要求「记忆文件也要推」：将五个 `.claude/MEMORY_*.md` 作为独立文档提交并推送到 `main`。
+- 用户要求「帮我填 .env」：根目录 `.env` 原先只有 `GITHUBTOKEN`，按根 `.env.example` 补齐 compose 所需变量；保留原有 `GITHUBTOKEN`，未打印其值。
+- 生成项：`SECRET_KEY`、`JWT_SECRET`、32 字节 Base64 `ENCRYPTION_KEY`、初始超管密码均为随机值；初始超管用户名 `admin`；MinIO 使用 compose 内网地址 `minio:9000`。
+- 根 `.env` 已被 `.gitignore` 忽略；`docker compose config -q` 通过。`backend/.env` 此前已完整，本次未改动。

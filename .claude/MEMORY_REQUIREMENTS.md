@@ -366,3 +366,21 @@
 | 自动化测试 | 完成 | `tests/test_admin_chat_records.py` 7 用例通过；合并后全量 178 collected / 176 passed，2 个 `test_ops` 既有环境失败 |
 | curl 验收 | 完成 | `.smoke/curl_module8.sh` 覆盖 8 组接口，合并前后均全部通过 |
 | 既有缺陷修复 | 完成 | `admin/router.py` 显式导入子模块 `APIRouter`；管理后台路由补 `/admin` 前缀 |
+
+## 2026-11-01 会话 19：修复 test_ops 过期用例
+
+| 需求 | 状态 | 实现手段 |
+| --- | --- | --- |
+| 非法 X-Request-ID 用例可执行 | 完成 | 测试头值改为 ASCII `"bad id!"`，仍覆盖非法值重新生成分支 |
+| selftest 纯函数用例可执行 | 完成 | 删除对不存在的 `ops_tasks.delay_ms` 的 monkeypatch，直接验证 `selftest(request_id, delay_ms)` |
+| 回归验证 | 完成 | `tests/test_ops.py` 22 passed；全量 192 passed、2 skipped |
+| 分支与合并 | 完成 | 分支 `fix/test-ops-stale-cases` 已推送；`main` 以 `--ff-only` 从 `c8f073e` 快进到 `c7b5b01` 并推送 |
+
+## 2026-11-01 会话 20：记忆文件推送与根 `.env`
+
+| 需求 | 状态 | 实现手段 |
+| --- | --- | --- |
+| 推送记忆文件 | 完成 | 五个 `.claude/MEMORY_*.md` 独立提交并推送 `main` |
+| 补齐根 `.env` | 完成 | 按根 `.env.example` 补齐 31 个 compose 变量，保留原 `GITHUBTOKEN`；随机生成密钥与初始超管密码 |
+| 配置校验 | 完成 | `docker compose config -q` 通过；`.env` 被 `.gitignore` 忽略，未入库 |
+| 后端本地配置 | 无需改动 | `backend/.env` 已包含宿主机启动所需全部键，本次未改 |
