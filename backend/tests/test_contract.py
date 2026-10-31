@@ -22,10 +22,10 @@ from app.models.user import Role, User
 LOGIN_URL = "/api/v1/auth/login"
 ME_URL = "/api/v1/auth/me"
 SESSIONS_URL = "/api/v1/sessions"
-USERS_URL = "/api/v1/users"
+USERS_URL = "/api/v1/admin/users"
 OPENAPI_URL = "/api/openapi.json"
 
-SUPER_PASSWORD = "SuperAdmin123!"
+SUPER_PASSWORD = "Demo1234"
 
 
 def _login(client, username: str = "demo_user", password: str = "Demo1234"):
@@ -267,7 +267,7 @@ def test_openapi_contract(client):
     # 至少抽查 3 个接口的权限码标注
     checks = [
         ("/api/v1/auth/login", "post", "none"),
-        ("/api/v1/users", "get", "admin.accounts.view"),
+        ("/api/v1/admin/users", "get", "admin.accounts.view"),
         ("/api/v1/sessions/{session_id}/messages", "get", "user.workspace"),
     ]
     for path, method, expected in checks:
