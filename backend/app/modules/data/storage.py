@@ -1,7 +1,7 @@
 """单桶对象存储适配层（10 号 §3 / §6）。
 
 默认 ``local`` 后端把 ``STORAGE_ROOT`` 当作桶根目录，目录结构与 MinIO 桶内前缀完全一致；
-``minio`` 后端保留开关但不作为本 demo 验收项。对象键只接受桶内相对路径，不生成公开 URL。
+``minio`` 后端把同一套对象键映射到 MinIO 单桶。对象键只接受桶内相对路径，不生成公开 URL。
 
 错误码：
 - 50003：存储服务错误
@@ -11,18 +11,26 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 import shutil
+import threading
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from io import BytesIO
 from pathlib import Path
 from typing import BinaryIO
 
+from minio import Minio
+from minio.commonconfig import CopySource
+from minio.error import S3Error
 from PIL import Image, UnidentifiedImageError
 
 from app.modules.data.config import config
+
+logger = logging.getLogger("esimage.storage")
 
 # 单文件上限 10MB（10,485,760 字节）
 MAX_FILE_SIZE = 10 * 1024 * 1024
@@ -143,6 +151,10 @@ class LocalStorageAdapter:
             raise StorageError(50003, f"非法对象键：{key}")
         return target
 
+    def local_path(self, key: str) -> Path:
+        """返回本地绝对路径；仅供本地后端与兼容脚本使用。"""
+        return self._absolute(key)
+
     def put_object(self, key: str, content: bytes, mime: str | None = None) -> ObjectInfo:
         target = self._absolute(key)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -204,11 +216,193 @@ class LocalStorageAdapter:
         return _ALLOWED_FORMATS.get(ext)
 
 
-class MinioStorageAdapter(LocalStorageAdapter):
-    """MinIO 后端占位：本 demo 不验收。"""
+_NOT_FOUND_CODES = {"NoSuchKey", "NoSuchObject", "NoSuchVersion"}
 
-    def __init__(self) -> None:  # pragma: no cover - 非本 demo 范围
-        raise NotImplementedError("MinIO 后端不在本 demo 验收范围内，请使用 STORAGE_BACKEND=local")
+
+def _http_datetime(value: str | None) -> datetime:
+    """解析 HTTP 日期头；缺失或非法时退化为当前时间。"""
+    if value:
+        try:
+            parsed = parsedate_to_datetime(value)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed
+        except (TypeError, ValueError):
+            pass
+    return datetime.now(timezone.utc)
+
+
+class MinioStorageAdapter:
+    """MinIO 单桶实现；客户端惰性创建，构造阶段不访问网络。"""
+
+    def __init__(
+        self,
+        client: Minio | None = None,
+        *,
+        endpoint: str | None = None,
+        access_key: str | None = None,
+        secret_key: str | None = None,
+        secure: bool | None = None,
+        bucket: str | None = None,
+    ) -> None:
+        self.bucket = bucket or config.MINIO_BUCKET
+        self.endpoint = config.MINIO_ENDPOINT if endpoint is None else endpoint
+        self.access_key = config.MINIO_ACCESS_KEY if access_key is None else access_key
+        self.secret_key = config.MINIO_SECRET_KEY if secret_key is None else secret_key
+        self.secure = config.MINIO_SECURE if secure is None else secure
+        self._client = client
+        self._client_lock = threading.Lock()
+
+    def _get_client(self) -> Minio:
+        """首次使用时创建客户端，避免环境变量缺失导致模块导入失败。"""
+        if self._client is None:
+            with self._client_lock:
+                if self._client is None:
+                    if not self.endpoint:
+                        raise StorageError(50003, "MinIO 未配置：缺少 MINIO_ENDPOINT")
+                    self._client = Minio(
+                        self.endpoint,
+                        access_key=self.access_key,
+                        secret_key=self.secret_key,
+                        secure=self.secure,
+                    )
+        return self._client
+
+    @staticmethod
+    def _is_not_found(exc: S3Error) -> bool:
+        return exc.code in _NOT_FOUND_CODES
+
+    def _raise_io_error(self, action: str, key: str, exc: Exception) -> None:
+        """把 SDK 异常统一映射为 50003，并避免把密钥写入日志。"""
+        logger.error("MinIO %s失败 key=%s reason=%s", action, key, exc)
+        raise StorageError(50003, f"{action}失败：{key}") from exc
+
+    @staticmethod
+    def _close_response(response) -> None:
+        """释放 HTTP 连接：close 后再显式归还连接池。"""
+        try:
+            response.close()
+        finally:
+            release = getattr(response, "release_conn", None)
+            if callable(release):
+                release()
+
+    def put_object(self, key: str, content: bytes, mime: str | None = None) -> ObjectInfo:
+        key = validate_object_key(key)
+        # 直接使用调用方传入的 bytes，避免大图写入前多复制一份
+        payload = content
+        content_type = mime or self._guess_mime(key) or "application/octet-stream"
+        try:
+            result = self._get_client().put_object(
+                self.bucket,
+                key,
+                BytesIO(payload),
+                len(payload),
+                content_type=content_type,
+            )
+        except S3Error as exc:
+            self._raise_io_error("写入对象", key, exc)
+        except Exception as exc:  # 网络错误等非 S3Error 也按 50003 处理
+            self._raise_io_error("写入对象", key, exc)
+        etag = str(getattr(result, "etag", "") or "").strip('"')
+        return ObjectInfo(key, len(payload), etag, mime, datetime.now(timezone.utc))
+
+    def get_object(self, key: str) -> tuple[bytes, ObjectInfo]:
+        key = validate_object_key(key)
+        try:
+            response = self._get_client().get_object(self.bucket, key)
+        except S3Error as exc:
+            if self._is_not_found(exc):
+                raise ObjectNotFound(key) from exc
+            self._raise_io_error("读取对象", key, exc)
+        except Exception as exc:
+            self._raise_io_error("读取对象", key, exc)
+        try:
+            content = response.read()
+            headers = getattr(response, "headers", None) or {}
+        except Exception as exc:
+            self._raise_io_error("读取对象", key, exc)
+        finally:
+            self._close_response(response)
+        etag = str(headers.get("ETag", "") or "").strip('"')
+        return content, ObjectInfo(
+            key,
+            len(content),
+            etag,
+            headers.get("Content-Type"),
+            _http_datetime(headers.get("Last-Modified")),
+        )
+
+    def open_object(self, key: str) -> BinaryIO:
+        """返回 MinIO 响应流；调用方负责 close/release_conn。"""
+        key = validate_object_key(key)
+        try:
+            return self._get_client().get_object(self.bucket, key)
+        except S3Error as exc:
+            if self._is_not_found(exc):
+                raise ObjectNotFound(key) from exc
+            self._raise_io_error("打开对象", key, exc)
+        except Exception as exc:
+            self._raise_io_error("打开对象", key, exc)
+
+    def stat_object(self, key: str) -> ObjectInfo | None:
+        key = validate_object_key(key)
+        try:
+            stat = self._get_client().stat_object(self.bucket, key)
+        except S3Error as exc:
+            if self._is_not_found(exc):
+                return None
+            self._raise_io_error("读取对象元数据", key, exc)
+        except Exception as exc:
+            self._raise_io_error("读取对象元数据", key, exc)
+        return ObjectInfo(
+            key,
+            stat.size,
+            str(stat.etag or "").strip('"'),
+            stat.content_type,
+            stat.last_modified or datetime.now(timezone.utc),
+        )
+
+    def exists(self, key: str | None) -> bool:
+        if not key:
+            return False
+        return self.stat_object(key) is not None
+
+    def copy_object(self, src: str, dst: str) -> ObjectInfo:
+        src = validate_object_key(src)
+        dst = validate_object_key(dst)
+        try:
+            self._get_client().copy_object(
+                self.bucket,
+                dst,
+                CopySource(self.bucket, src),
+            )
+        except S3Error as exc:
+            if self._is_not_found(exc):
+                raise ObjectNotFound(src) from exc
+            self._raise_io_error("复制对象", src, exc)
+        except Exception as exc:
+            self._raise_io_error("复制对象", src, exc)
+        return self.stat_object(dst) or ObjectInfo(
+            dst, 0, "", None, datetime.now(timezone.utc)
+        )
+
+    def delete_object(self, key: str) -> None:
+        """删除对象；MinIO remove_object 本身幂等。"""
+        key = validate_object_key(key)
+        try:
+            self._get_client().remove_object(self.bucket, key)
+        except Exception as exc:
+            self._raise_io_error("删除对象", key, exc)
+
+    def path(self, key: str) -> Path:
+        """MinIO 后端没有本地路径，显式拒绝以免调用方误用。"""
+        raise StorageError(50003, f"MinIO 后端不支持本地路径：{key}")
+
+    @staticmethod
+    def _guess_mime(key: str) -> str | None:
+        ext = key.rsplit(".", 1)[-1].lower() if "." in key else ""
+        return _ALLOWED_FORMATS.get(ext)
 
 
 def get_storage():

@@ -5,7 +5,7 @@ from __future__ import annotations
 from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -21,6 +21,7 @@ from app.modules.workspace.service import (
     image_content_url,
     image_download_filename,
     image_thumbnail_url,
+    media_response,
     now_utc,
     read_image_bytes,
     require_permission,
@@ -33,7 +34,6 @@ from app.modules.workspace.service import (
     validate_template_id,
     workspace_lock,
 )
-from app.modules.workspace.storage import storage
 
 router = APIRouter(tags=["workspace"])
 
@@ -431,11 +431,8 @@ def get_image_content(
         )
     if not image.file_path:
         raise ApiError(404, 30014, "文件不存在")
-    path = storage.path(image.file_path)
-    if not path.is_file():
-        raise ApiError(404, 30014, "文件不存在")
-    return FileResponse(
-        path,
+    return media_response(
+        image.file_path,
         media_type="image/png",
         headers={
             "Cache-Control": "private, max-age=300",
@@ -449,16 +446,13 @@ def get_image_thumbnail(
     image_id: int,
     auth: AuthContext = Depends(require_any_permission("user.history", "user.generate")),
     db: Session = Depends(get_db),
-) -> FileResponse:
+) -> Response:
     """结果网格缩略图（与 5 号文档的接口约定保持一致）。"""
     image = _get_owned_image(db, auth.user.id, image_id)
     if not image.thumbnail_path:
         raise ApiError(404, 30014, "文件不存在")
-    path = storage.path(image.thumbnail_path)
-    if not path.is_file():
-        raise ApiError(404, 30014, "文件不存在")
-    return FileResponse(
-        path,
+    return media_response(
+        image.thumbnail_path,
         media_type="image/webp",
         headers={
             "Cache-Control": "private, max-age=3600",
@@ -506,15 +500,16 @@ def download_image(
         "Cache-Control": "no-store",
     }
 
-    # 归档件按 5 号契约从 archive/ 读取；热数据继续走 FileResponse
+    # 归档件按 5 号契约从 archive/ 读取；热数据走统一对象存储门面
     if image.archived_at is not None:
         data = read_image_bytes(image)
         return Response(content=data, media_type="image/png", headers=headers)
 
     if not image.file_path:
         raise ApiError(404, 30014, "文件不存在")
-    path = storage.path(image.file_path)
-    if not path.is_file():
-        raise ApiError(404, 30014, "文件不存在")
 
-    return FileResponse(path, media_type="image/png", headers=headers)
+    return media_response(
+        image.file_path,
+        media_type="image/png",
+        headers=headers,
+    )

@@ -1031,3 +1031,82 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 8. curl 复验：40 项 HTTP + 17 项业务码检查 0 失败；OpenAPI 36 条 `/api/v1/admin/*` 路由，无 `/admin/admin` 双重前缀。
 9. chrome-devtools MCP 已连接并打开 `http://127.0.0.1:8016/api/docs`：Swagger UI 展示 `admin-accounts`（11 个）、`admin-audit`（2 个）等分组，控制台无 error/warn；截图已留存。
 10. 冒烟脚本就绪探测从 `/openapi.json` 改为 `/api/openapi.json` 并加 `-f`（9 号契约迁移后旧路径 404，curl 仍返回 0 会误判）。
+
+## 2026-10-31 会话 18：本地 MinIO 统一存储
+
+### 一、修改文件
+
+1. `backend/app/modules/data/storage.py`
+   - 补齐 `MinioStorageAdapter`：惰性创建 `Minio` 客户端、`put_object/get_object/open_object/stat_object/exists/copy_object/delete_object/path`。
+   - `NoSuchKey/NoSuchObject/NoSuchVersion` 统一映射 `ObjectNotFound`（30014）；其他 `S3Error`/网络异常映射 `StorageError(50003)` 并记录日志。
+   - `get_object` 读取后关闭响应并显式 `release_conn`；`put_object` 直接复用调用方 bytes，避免大图多复制一份。
+   - `LocalStorageAdapter` 新增 `local_path()`，供门面 `path()` 调用。
+2. `backend/app/modules/workspace/storage.py`
+   - `LocalStorage` 改为统一门面 `Storage`，内部委托 `get_storage()` 返回的适配器。
+   - 保留 `save/read_bytes/open_stream/path/exists/delete`；`path()` 仅本地后端可用，MinIO 后端抛 50003；`is_local` 供兼容判断。
+3. `backend/app/modules/workspace/service.py`
+   - 新增 `read_media_bytes()`：统一把 `ObjectNotFound` 转 404/30014、`StorageError` 转 500/50003。
+   - `read_image_bytes()` 热路径与归档路径改走 `storage.read_bytes()`，归档超时仍用线程池 + `ARCHIVE_READ_TIMEOUT_SECONDS`。
+4. `backend/app/modules/workspace/uploads.py`
+   - 上传原图/缩略图接口由 `FileResponse` 改为 `Response(content=bytes)`，保留原 `Cache-Control` 头与 MIME。
+5. `backend/app/modules/workspace/generations.py`
+   - 图片预览、缩略图、下载热路径改为 `Response(content=bytes)`；归档分支保持原逻辑。
+6. `backend/app/modules/admin/service.py`
+   - `read_storage_bytes()` 去掉本地 `path.is_file()` 预检，直接读门面；保留超时线程池与 30014/50003 映射。
+   - `file_response()` 改为读取 bytes 后返回 `Response`，管理端素材下载不再依赖本地路径。
+7. `backend/tests/conftest.py`
+   - `os.environ["STORAGE_BACKEND"] = "local"` 强制测试走本地存储，避免开发者 `.env` 的 MinIO 配置影响测试。
+8. `backend/.env.example`
+   - 新增 `REDIS_URL`；存储段改为 MinIO 默认（`STORAGE_BACKEND=minio`、`MINIO_ENDPOINT=127.0.0.1:9002`、`MINIO_SECRET_KEY=esimage123` 等）。
+9. `docker-compose.yml`
+   - Redis 暴露 `6379`；MinIO 暴露 `9002:9000`、`9003:9001`。
+   - MinIO 密码默认 `esimage` → `esimage123`（MinIO 要求 ≥8 位）。
+   - `minio-init` 镜像由 `minio/mc:latest` 改为 `minio/minio:latest`，使用镜像内置 `/usr/bin/mc`。
+   - `migrate/backend/worker` 环境块补齐 `MINIO_ACCESS_KEY/MINIO_SECRET_KEY`。
+10. 新增 `backend/tests/test_storage_backend.py`（13 个用例，Fake MinIO）与 `backend/tests/test_storage_minio_integration.py`（2 个 opt-in 真实 MinIO 用例）。
+11. `backend/.env`：本地生成，含随机 `JWT_SECRET` 与 MinIO 密码；已被 `.gitignore` 忽略，**未提交**。
+
+### 二、验证与命令
+
+- 存储单元测试：
+  - `python -m pytest tests/test_storage_backend.py -q`
+  - 结果：**13 passed**。
+- 真实 MinIO 集成测试（需显式环境变量）：
+  - `MINIO_TEST_ENDPOINT=127.0.0.1:9002 MINIO_TEST_ACCESS_KEY=esimage MINIO_TEST_SECRET_KEY=esimage123 python -m pytest tests/test_storage_minio_integration.py -q`
+  - 结果：**2 passed**（写入/读取/复制/删除 + 门面读写）。
+- 真实 MinIO 端到端：TestClient 登录 → 上传 → 原图读取 → 缩略图读取 → `/api/health`；MinIO 中确认 `uploads/{user_id}/...`、`thumbnails/{user_id}/...` 对象存在；health 返回 `{"status":"ok","checks":{"database":"ok","redis":"ok","minio":"ok"}}`。
+- 全量测试：**仅 2 个既有 `test_ops` 失败**（`test_request_id_invalid_regenerated` 中文头编码、`test_selftest_pure` 缺少 `ops_tasks.delay_ms`），已在干净 `origin/main` 复现，与本改动无关。
+- `git diff --check`：通过。
+
+### 三、环境事故（需用户裁决）
+
+- `docker compose up` 时因当前 compose 卷键为 `pgdata`，而旧容器使用 `esimage_esimage_pgdata`，`esimage-postgres` 被重建并挂载新的空卷 `esimage_pgdata`。
+- 旧数据卷 `esimage_esimage_pgdata` 仍然完整、未被删除；新容器当前是空库。
+- 尝试 `docker rm -f esimage-postgres` 后挂回旧卷的操作被自动权限策略拒绝，未执行；需用户确认恢复方案。
+
+### 四、独立审查与修复
+
+审查代理完成只读审查后，按发现逐项处理：
+
+1. **热文件响应头/Range（已修复）**：`workspace.service.media_response()` 与 `admin.service.file_response()` 在 `storage.is_local` 时继续返回 `FileResponse`，保留 `ETag/Last-Modified/Accept-Ranges` 与 Range 206；MinIO 后端返回缓冲 `Response`。MinIO 后端仍不支持 Range，属于对象存储切换的已知取舍。
+2. **async 上传阻塞事件循环（已修复）**：`uploads.py` 与 `admin/assets/router.py` 的 `storage.save/delete` 用 `run_in_threadpool` 包裹；缩略图生成与写入合并进线程池。
+3. **compose 存储配置（已修复）**：`backend/worker` 显式注入 `STORAGE_BACKEND=${STORAGE_BACKEND:-minio}`、`MINIO_BUCKET`；`minio-init` 使用 `MINIO_BUCKET` 创建桶；根 `.env.example` 增加 `STORAGE_BACKEND=minio` 并把密码统一为 `esimage123`。
+4. **本地脚本兼容（已修复）**：5 个 `curl_*_smoke.sh` 显式 `export STORAGE_BACKEND=local`；`verify_archive_scope()` 固定 `config.STORAGE_BACKEND = "local"`。
+5. **写入路径 50003（已修复）**：`app/main.py` 增加 `ObjectNotFound → 404/30014`、`StorageError → 500/50003` 全局异常处理器，写接口不再落到 50001。
+6. **归档超时连接占用（未改，记录）**：MinIO SDK 默认连接/读取超时与重试较长；极端卡顿时被放弃的线程可能占用连接池。后续可配置短超时 PoolManager，本次未扩展配置项。
+7. **端口暴露（已修复）**：Redis/MinIO 宿主端口改为 `127.0.0.1` 绑定，避免局域网访问。
+8. **测试缺口（部分补强）**：新增 `test_get_closes_response` 断言读取后响应已关闭；HTTP 端点级 MinIO 故障注入仍未覆盖。
+
+### 五、验证结果（修复后）
+
+- `python -m pytest tests/test_storage_backend.py tests/test_workspace.py tests/test_history.py -q`：**46 passed**。
+- `python -m pytest tests/test_admin_content.py -q`：**15 passed**。
+- 真实 MinIO 集成测试：**2 passed**（`MINIO_TEST_ENDPOINT=127.0.0.1:9002`）。
+- 全量 `pytest`：仍仅 2 个既有 `test_ops` 失败（与本次改动无关）。
+- `docker compose config -q`：通过；`minio-init` 渲染使用 `MINIO_BUCKET`。
+
+### 六、提交状态
+
+- 已在 `feat/minio-storage-local` 提交：提交信息 `feat: 接入 MinIO 统一存储门面`（amend 后具体 hash 以 `git log` 为准）。
+- 未 push/merge，等待用户确认。
+- Postgres 卷切换事故仍待用户裁决（见第三节）。

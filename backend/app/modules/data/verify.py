@@ -301,6 +301,8 @@ def verify_storage_scope(report: VerifyReport) -> None:
 def verify_archive_scope(report: VerifyReport) -> None:
     root = tempfile.mkdtemp(prefix="esimage_data_archive_")
     config.STORAGE_ROOT = root
+    # 本用例使用临时本地目录，必须固定本地后端，避免开发者 .env 指向 MinIO
+    config.STORAGE_BACKEND = "local"
     config.ARCHIVE_RETENTION_DAYS = 1
 
     with SessionLocal() as db:

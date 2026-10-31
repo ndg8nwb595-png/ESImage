@@ -330,3 +330,20 @@
 - **9 号契约**：`modules/contract/openapi.py::PERMISSION_MAP` 的管理端路径必须与 `/api/v1/admin/*` 一致；`demo_super` 统一密码 `Demo1234`。
 - **测试库**：本模块用 `TEST_DB_NAME=esimage_admin_test`；上游 conftest 默认库为 `esimage_admin7_test`，并行运行时用环境变量覆盖。
 - **已知非本模块失败**：11 号 `tests/test_ops.py` 的 2 个用例在干净 `origin/main` 也失败（httpx2 中文头、`delay_ms` monkeypatch），不修改。
+
+## 2026-10-31 存储架构共识（MinIO 统一门面）
+
+- **唯一业务读写入口**：业务代码只依赖 `app.modules.workspace.storage.Storage`（`storage` 单例）；禁止在新代码里直接拼 `STORAGE_ROOT` 或调用本地文件 API。
+- **后端选择**：`Storage` 委托 `app.modules.data.storage.get_storage()`；`STORAGE_BACKEND=local` → `LocalStorageAdapter`，`minio` → `MinioStorageAdapter`，未知值直接 50003。
+- **对象键规范**：始终使用桶内相对键（`uploads/...`、`generated/...`、`thumbnails/...`、`archive/...`），与本地目录结构完全一致；本地与 MinIO 可互换。
+- **本地路径边界**：`storage.path()` 只允许本地后端；MinIO 后端显式抛 50003，禁止调用方假设有本地文件。
+- **HTTP 媒体响应**：本地后端继续使用 `FileResponse`，保留 `ETag/Last-Modified/Accept-Ranges` 与 Range 206；MinIO 后端使用缓冲 `Response(content=bytes)`。禁止对 MinIO 对象调用 `FileResponse`；MinIO 暂不支持 Range。
+- **async 路由中的存储调用**：`storage.save/delete` 是同步网络调用，必须用 `run_in_threadpool` 包裹，禁止直接阻塞事件循环。
+- **存储异常兜底**：`app/main.py` 统一处理 `ObjectNotFound → 404/30014` 与 `StorageError → 500/50003`；写接口无需各自捕获。
+- **本地脚本隔离**：所有 `curl_*_smoke.sh` 与 `verify_archive_scope()` 显式固定 `STORAGE_BACKEND=local`，避免读取开发者 `.env` 的 MinIO 配置。
+- **错误映射**：对象缺失 → 404 / 30014（归档文案按场景）；存储/网络异常 → 500 / 50003。归档读取仍受 `ARCHIVE_READ_TIMEOUT_SECONDS` 线程池超时约束。
+- **配置来源**：`app.core.config.settings` 负责 `load_dotenv(backend/.env)`；`app.modules.data.config.config` 直接读环境变量。应用启动必须先导入 core 配置；测试必须在导入 app 前覆盖环境变量。
+- **测试隔离**：`tests/conftest.py` 强制 `STORAGE_BACKEND=local`；真实 MinIO 集成测试用 `MINIO_TEST_ENDPOINT` 显式开启，默认跳过。
+- **本地 Docker 端口**：Redis 6379；MinIO API 9002、控制台 9003（避开并行项目的 9000/9001）；PostgreSQL 55433 保持不变。
+- **MinIO 初始化**：`minio-init` 复用 `minio/minio` 镜像内置 `mc`，不依赖 `minio/mc` 镜像；根密码必须 ≥8 位。
+- **Compose 卷风险**：本项目卷键为 `pgdata`，历史容器可能使用 `esimage_esimage_pgdata`；执行 `docker compose up` 前必须确认卷名，避免重建 Postgres 并切到空库。

@@ -18,6 +18,8 @@ export DATABASE_URL="${DATABASE_URL:-postgresql+psycopg://esimage:esimage@127.0.
 export JWT_SECRET="${JWT_SECRET:-admin-accounts-demo-secret-0123456789abcdef}"
 export PYTHONPATH=.
 export STORAGE_ROOT="${STORAGE_ROOT:-storage}"
+# 冒烟脚本使用独立本地目录，固定本地后端避免读取 backend/.env 的 MinIO 配置
+export STORAGE_BACKEND=local
 
 PORT="${PORT:-8016}"
 BASE="http://127.0.0.1:$PORT/api/v1"

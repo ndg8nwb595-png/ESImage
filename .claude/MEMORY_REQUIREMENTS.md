@@ -332,3 +332,21 @@
 | 自动化测试 | 完成 | `tests/test_history.py` 8 用例；合并最新 `main` 后全量 `pytest` 93 用例通过 |
 | curl 验收 | 完成 | `scripts/curl_history_smoke.sh`，独立库/存储，覆盖接口文档 §16 全部调用 |
 | 待用户裁决 | 待确认 | 种子计数口径（21 可见 vs 文档“21 completed + partial”）；manifest 宽度/高度分列与 4 号“尺寸”单列差异 |
+
+## 2026-10-31 会话 18：本地 MinIO 存储接入
+
+| 需求 | 状态 | 实现手段 |
+| --- | --- | --- |
+| `backend/.env` 本地启动配置 | 完成 | 以 `.env.example` 为模板生成；数据库 55433、Redis 6379、MinIO 127.0.0.1:9002；JWT_SECRET 随机；`.env` gitignored |
+| Docker 依赖端口暴露 | 完成 | `docker-compose.yml` 增加 Redis 6379、MinIO 9002/9003；MinIO 密码默认改 `esimage123` |
+| 业务文件真实入 MinIO | 完成 | 完整实现 `MinioStorageAdapter`；`workspace.storage.Storage` 统一门面委托 `get_storage()` |
+| 全量读写统一 | 完成 | 上传/生成/缩略图/管理端素材/历史归档读取均走门面；热下载由 `FileResponse` 改缓冲 `Response` |
+| 错误契约保持 | 完成 | 对象缺失→404/30014；存储异常→500/50003；归档超时语义不变 |
+| 测试隔离 | 完成 | `tests/conftest.py` 强制 `STORAGE_BACKEND=local`；真实 MinIO 测试需显式环境变量才运行 |
+| 自动化测试 | 完成 | 13 个存储单元测试 + 2 个真实 MinIO 集成测试通过；全量仅 2 个既有 `test_ops` 失败 |
+| 端到端验证 | 完成 | 真实 MinIO：登录→上传→原图→缩略图→`/api/health`；对象落在 `uploads/`、`thumbnails/` |
+| 待用户裁决 | 待确认 | `esimage-postgres` 卷切换；是否恢复旧卷 `esimage_esimage_pgdata` |
+| 提交/合并 | 部分完成 | 已提交（`feat: 接入 MinIO 统一存储门面`）；push/merge 等待用户确认 |
+| 独立审查修复 | 完成 | 本地 FileResponse 兼容、async 上传线程池、compose 存储配置、脚本本地隔离、StorageError 全局映射、端口绑定、响应关闭测试 |
+| MinIO Range/ETag | 已知取舍 | MinIO 后端使用缓冲 Response，不支持 Range；本地后端保持原 FileResponse 行为 |
+| 归档超时连接池 | 待后续 | MinIO SDK 默认超时/重试较长；极端卡顿可能占用连接池，后续可配置短超时 PoolManager |

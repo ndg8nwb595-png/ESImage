@@ -182,3 +182,17 @@
 - **汇总路由前缀只能加一次**：子路由若自带 `/admin`，汇总层再加 `prefix="/admin"` 会得到 `/admin/admin`；用 OpenAPI 检查 `"/admin/admin" in path` 作为回归断言。
 - **合并后先确认测试失败是否来自自己**：用 `git worktree add <tmp> origin/main` 在干净 main 上跑同一用例；本次 2 个 `test_ops` 失败在 main 上同样存在，按范围不修改，只汇报。
 - **测试清理名单要跟随种子变化**：上游新增 `demo_user2` 后，按「非种子用户」清理的测试夹具会误删它；种子账号集合要集中维护。
+- **`FileResponse` 不能直接服务 MinIO 对象**：它只接受本地路径；切换对象存储后必须缓冲 bytes 返回 `Response`，否则运行期报路径不存在。
+- **MinIO 根密码至少 8 位**：`MINIO_ROOT_PASSWORD` 为 7 位的 `esimage` 会让容器直接 FATAL；默认值要改成 `esimage123`，并同步 compose 与 `.env.example`。
+- **`minio/mc` 镜像可能拉不到**：国内镜像源 403、quay 401 时，直接复用 `minio/minio` 镜像内置的 `/usr/bin/mc` 执行初始化。
+- **S3 缺失对象是 `S3Error` 不是 `OSError`**：按 `code in {NoSuchKey, NoSuchObject, NoSuchVersion}` 映射 30014；其余按 50003，不要吞异常。
+- **读完 MinIO 响应要 close + release_conn**：否则连接池泄漏；缓冲读取时先保存 headers 再关闭。
+- **Compose 卷名可能和容器现有卷不一致**：`docker compose up` 会按当前 compose 键名重建容器并挂新卷；操作前用 `docker volume ls` / `docker inspect` 核对，避免切走生产/演示数据。
+- **测试必须显式隔离存储后端**：开发者 `.env` 设为 minio 时，测试若只 `setdefault` 会连真实 MinIO；用强制赋值 `os.environ["STORAGE_BACKEND"]="local"`。
+- **缓冲响应的取舍**：`Response(content=bytes)` 不支持 Range 和大文件流式；当前图片 ≤10MB 可接受，若后续支持大文件再换 `StreamingResponse` 并处理连接释放。
+- **Docker 启动依赖可能含 `pull_policy: never`**：镜像未提前拉取会直接失败；先 `docker images` 确认本地有对应镜像。
+- **async 路由里不要直接调用同步对象存储 SDK**：`minio.put_object/remove_object` 会阻塞事件循环；用 `fastapi.concurrency.run_in_threadpool` 包裹。
+- **根 `.env` 与 `backend/.env` 是两份配置**：compose 插值读根 `.env`，宿主机 uvicorn 读 `backend/.env`；改密码/端点时必须同步两处模板，否则宿主机连 compose MinIO 会 `SignatureDoesNotMatch`。
+- **本地冒烟脚本要固定存储后端**：`STORAGE_ROOT` 只对 local 生效；开发者 `.env` 改成 minio 后，脚本必须显式 `STORAGE_BACKEND=local`。
+- **全局异常处理器按 MRO 匹配**：同时注册 `ObjectNotFound` 与 `StorageError` 时，子类会命中更具体的处理器；不要在通用 `Exception` 里再判断类型。
+- **本地开发端口默认绑定 `127.0.0.1`**：`0.0.0.0` 会把无密码 Redis / 默认口令 MinIO 暴露到局域网。

@@ -6,7 +6,8 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -20,6 +21,7 @@ from app.modules.workspace.service import (
     ALLOWED_MIME_TYPES,
     MAX_IMAGE_BYTES,
     MAX_UPLOAD_COUNT,
+    media_response,
     require_permission,
     to_iso,
     upload_file_url,
@@ -86,14 +88,17 @@ async def upload_image(
     token = uuid.uuid4().hex
     file_path = f"uploads/{auth.user.id}/{token}{extension}"
     thumbnail_path = f"thumbnails/{auth.user.id}/{token}.webp"
-    storage.save(file_path, data)
+    # MinIO 是同步网络调用，放到线程池避免阻塞事件循环
+    await run_in_threadpool(storage.save, file_path, data)
     try:
-        storage.save(thumbnail_path, make_thumbnail_webp(data))
+        await run_in_threadpool(
+            lambda: storage.save(thumbnail_path, make_thumbnail_webp(data))
+        )
     except ValueError as exc:
-        storage.delete(file_path)
+        await run_in_threadpool(storage.delete, file_path)
         raise ApiError(400, 30006, str(exc) or "图片文件损坏，请重新上传") from exc
     except Exception:
-        storage.delete(file_path)
+        await run_in_threadpool(storage.delete, file_path)
         raise
 
     with workspace_lock():
@@ -110,8 +115,8 @@ async def upload_image(
             or 0
         )
         if active_count >= MAX_UPLOAD_COUNT:
-            storage.delete(file_path)
-            storage.delete(thumbnail_path)
+            await run_in_threadpool(storage.delete, file_path)
+            await run_in_threadpool(storage.delete, thumbnail_path)
             raise ApiError(400, 30006, "最多上传 5 张商品图")
 
         max_sort = db.scalar(
@@ -141,8 +146,8 @@ async def upload_image(
             db.commit()
         except Exception:
             db.rollback()
-            storage.delete(file_path)
-            storage.delete(thumbnail_path)
+            await run_in_threadpool(storage.delete, file_path)
+            await run_in_threadpool(storage.delete, thumbnail_path)
             raise
     db.refresh(asset)
     print(f"[上传] 用户 {auth.user.id} 上传商品图 upload_id={asset.id} sort={sort_order}")
@@ -179,14 +184,11 @@ def get_upload_content(
     upload_id: int,
     auth: AuthContext = Depends(require_permission("user.generate")),
     db: Session = Depends(get_db),
-) -> FileResponse:
+) -> Response:
     """读取上传图原图（demo 约定）。"""
     asset = _get_owned_asset(db, auth.user.id, upload_id)
-    path = storage.path(asset.file_path)
-    if not path.is_file():
-        raise ApiError(404, 30014, "文件不存在")
-    return FileResponse(
-        path,
+    return media_response(
+        asset.file_path,
         media_type=asset.mime_type,
         headers={
             "Cache-Control": "private, max-age=300",
@@ -200,16 +202,13 @@ def get_upload_thumbnail(
     upload_id: int,
     auth: AuthContext = Depends(require_permission("user.generate")),
     db: Session = Depends(get_db),
-) -> FileResponse:
+) -> Response:
     """读取上传图缩略图（demo 约定，WebP，最大宽度 400px）。"""
     asset = _get_owned_asset(db, auth.user.id, upload_id)
     if not asset.thumbnail_path:
         raise ApiError(404, 30014, "文件不存在")
-    path = storage.path(asset.thumbnail_path)
-    if not path.is_file():
-        raise ApiError(404, 30014, "文件不存在")
-    return FileResponse(
-        path,
+    return media_response(
+        asset.thumbnail_path,
         media_type="image/webp",
         headers={
             "Cache-Control": "private, max-age=3600",

@@ -29,6 +29,8 @@ services:
     pull_policy: never
     container_name: esimage-redis
     command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379" # 仅本机开发可访问；生产移除
     volumes:
       - redisdata:/data
     healthcheck:
@@ -46,8 +48,11 @@ services:
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-esimage}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-esimage}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-esimage123}
       TZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:9002:9000" # 仅本机开发可访问（宿主 9000/9001 可能被其他 MinIO 占用）；生产移除
+      - "127.0.0.1:9003:9001" # MinIO 控制台
     volumes:
       - miniodata:/data
     healthcheck:
@@ -59,7 +64,8 @@ services:
     networks: [esimage_net]
 
   minio-init:
-    image: minio/mc:latest
+    # 复用 minio 镜像内置的 mc，避免本地镜像源无法拉取 minio/mc
+    image: minio/minio:latest
     pull_policy: never
     container_name: esimage-minio-init
     depends_on:
@@ -67,18 +73,19 @@ services:
         condition: service_healthy
     environment:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-esimage}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-esimage}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-esimage123}
+      MINIO_BUCKET: ${MINIO_BUCKET:-esimage}
     entrypoint: >
       /bin/sh -c "
       until mc alias set local http://minio:9000 $${MINIO_ACCESS_KEY} $${MINIO_SECRET_KEY}; do sleep 2; done;
-      mc mb --ignore-existing local/esimage;
-      mc anonymous set none local/esimage;
+      mc mb --ignore-existing local/$${MINIO_BUCKET};
+      mc anonymous set none local/$${MINIO_BUCKET};
       for p in uploads generated thumbnails archive exports templates materials avatars; do
         echo probe > /tmp/$${p}.probe;
-        mc cp /tmp/$${p}.probe local/esimage/$${p}/.probe;
-        mc rm local/esimage/$${p}/.probe;
+        mc cp /tmp/$${p}.probe local/$${MINIO_BUCKET}/$${p}/.probe;
+        mc rm local/$${MINIO_BUCKET}/$${p}/.probe;
       done;
-      echo 'minio-init: bucket esimage ready';
+      echo 'minio-init: bucket ready';
       "
     restart: "no"
     networks: [esimage_net]
@@ -91,6 +98,8 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://esimage:esimage@postgres:5432/esimage
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-esimage}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-esimage123}
     depends_on:
       postgres:
         condition: service_healthy
@@ -107,7 +116,11 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://esimage:esimage@postgres:5432/esimage
       REDIS_URL: redis://redis:6379/0
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-minio}
       MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-esimage}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-esimage123}
+      MINIO_BUCKET: ${MINIO_BUCKET:-esimage}
       ESIMAGE_PROCESS: backend
     volumes:
       - applogs:/app/logs
@@ -136,6 +149,11 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://esimage:esimage@postgres:5432/esimage
       REDIS_URL: redis://redis:6379/0
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-minio}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-esimage}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-esimage123}
+      MINIO_BUCKET: ${MINIO_BUCKET:-esimage}
       ESIMAGE_PROCESS: worker
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
     volumes:

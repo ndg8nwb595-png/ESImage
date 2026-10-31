@@ -277,3 +277,16 @@
 - 合并最新 `main`（9 号契约 `d4343c7`/`9ea5316`、7 号管理端整合 `a97801c`、OpenAPI 路径对齐 `f42bf1e`）：解决 `deps.py`、`admin/router.py`、`auth/seed.py`、`test_contract.py` 冲突；管理端统一 `/api/v1/admin/*`，统计采用 `build_user_stats`，补齐 `demo_user2` 并去重 `demo_super`。
 - 合并后全量 **171 collected / 169 passed**；仅剩 2 个 11 号 `test_ops` 既有失败（httpx2 中文头编码、monkeypatch 不存在的 `delay_ms`），已在干净 `origin/main` 工作树复现，按范围未修改；curl 复验 0 失败，OpenAPI 36 条管理端路由无双重前缀。
 - chrome-devtools MCP 已验证 `/api/docs` Swagger UI（admin-accounts 11 个接口、admin-audit 2 个接口，控制台无错误）；冒烟脚本就绪探测修正为 `/api/openapi.json`。
+
+## 2026-10-31 会话 18：本地 MinIO 存储接入（宿主机后端 + Docker 依赖）
+
+- 用户要求：为 `backend/.env` 编写本地启动配置，使用 Docker MinIO。
+- 摸查发现：`data/storage.py` 的 `MinioStorageAdapter` 只是占位（`NotImplementedError`），且业务读写走 `workspace/storage.py` 的本地实现，只改 `.env` 不会真正写入 MinIO。
+- 用户确认：宿主机跑 uvicorn，PostgreSQL/Redis/MinIO 走 Docker；业务文件真实写入 MinIO；方案 A「统一存储门面，全量走 MinIO」；直接修改 `docker-compose.yml` 暴露端口。
+- 用户随后要求 `/code-change-workflow`，并「开一个新分支改」；分支 `feat/minio-storage-local`。
+- 实现：`MinioStorageAdapter` 完整实现；`workspace.storage.Storage` 改为门面；上传/生成/缩略图/管理端素材读取全部走门面；下载接口由 `FileResponse` 改为缓冲 `Response`；错误码保持 30014/50003；conftest 强制测试走 local。
+- 环境：宿主 9000/9001 被并行项目 MinIO 占用，改用 9002/9003；MinIO 密码默认 `esimage` 不足 8 位，改为 `esimage123`；`minio/mc` 镜像不可拉取，复用 `minio/minio` 内置 `mc`；Redis 暴露 6379。
+- 验证：新增 13 个存储单元测试 + 2 个真实 MinIO 集成测试（opt-in）全部通过；真实 MinIO 完成上传→读取→缩略图→health 端到端；全量 pytest 仅 2 个既有 `test_ops` 失败。
+- 事故/待用户裁决：`docker compose up` 因卷键名差异重建了 `esimage-postgres`，新容器挂载新的空卷 `esimage_pgdata`；旧数据仍完整保存在 `esimage_esimage_pgdata` 卷中，未删除。恢复旧容器的 `docker rm -f` 被自动权限策略拒绝，需用户确认如何处理。
+- 审查：独立只读审查代理完成，提出 8 项；已修复本地 FileResponse 兼容、async 上传阻塞、compose 存储配置、脚本本地后端隔离、StorageError 全局映射、MinIO 端口绑定，并补响应关闭测试；MinIO 的 Range/ETag 缺失与归档超时连接占用记录为已知取舍。未提交 `.env`（gitignored）和无关 PRD。
+- 状态：已在 `feat/minio-storage-local` 提交（提交信息 `feat: 接入 MinIO 统一存储门面`，hash 以 `git log` 为准）；未 push/merge，等待用户确认。

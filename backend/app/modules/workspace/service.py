@@ -11,6 +11,8 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any
 
+from fastapi.responses import FileResponse, Response
+
 from app.core.config import settings
 from app.core.deps import (  # 重新导出，供 workspace/history 子路由复用
     require_any_permission,
@@ -18,6 +20,7 @@ from app.core.deps import (  # 重新导出，供 workspace/history 子路由复
 )
 from app.core.response import ApiError
 from app.models.workspace import CreativeSession, GeneratedImage
+from app.modules.data.storage import ObjectNotFound, StorageError
 from app.modules.workspace.storage import storage
 
 logger = logging.getLogger("esimage.storage")
@@ -255,6 +258,43 @@ def _log_archive_error(image: GeneratedImage, path: str, reason: str) -> None:
     )
 
 
+def read_media_bytes(relative_path: str, *, missing_message: str = "文件不存在") -> bytes:
+    """读取热存储对象：缺失返回 404/30014，存储异常返回 500/50003。
+
+    同时适用于本地目录与 MinIO 后端；调用方无需关心后端类型。
+    """
+    try:
+        return storage.read_bytes(relative_path)
+    except ObjectNotFound:
+        raise ApiError(404, 30014, missing_message) from None
+    except StorageError as exc:
+        logger.error("存储读取失败 path=%s reason=%s", relative_path, exc.message)
+        raise ApiError(500, 50003, "存储服务错误") from exc
+
+
+def media_response(
+    relative_path: str,
+    *,
+    media_type: str,
+    headers: dict[str, str],
+    missing_message: str = "文件不存在",
+) -> Response:
+    """构造媒体响应：本地后端保留 FileResponse 的缓存头与 Range 支持。
+
+    MinIO 后端没有本地文件，读取完整对象后返回缓冲 Response。
+    """
+    if storage.is_local:
+        path = storage.path(relative_path)
+        if not path.is_file():
+            raise ApiError(404, 30014, missing_message)
+        return FileResponse(path, media_type=media_type, headers=headers)
+    return Response(
+        content=read_media_bytes(relative_path, missing_message=missing_message),
+        media_type=media_type,
+        headers=headers,
+    )
+
+
 def read_image_bytes(image: GeneratedImage) -> bytes:
     """读取生成图原件；归档件从 `archive/{file_path}` 读取并受超时约束。
 
@@ -265,39 +305,37 @@ def read_image_bytes(image: GeneratedImage) -> bytes:
         raise ApiError(404, 30014, "文件不存在")
 
     if image.archived_at is None:
-        path = storage.path(image.file_path)
-        if not path.is_file():
-            raise ApiError(404, 30014, "文件不存在")
         try:
-            return path.read_bytes()
-        except OSError as exc:
+            return storage.read_bytes(image.file_path)
+        except ObjectNotFound:
+            raise ApiError(404, 30014, "文件不存在") from None
+        except StorageError as exc:
             logger.error(
                 "热存储读取失败 image_id=%s batch_id=%s path=%s reason=%s",
                 image.id,
                 image.batch_id,
                 image.file_path,
-                exc,
+                exc.message,
             )
             raise ApiError(500, 50003, "存储服务错误") from exc
 
     relative_path = archive_relative_path(image)
-    path = storage.path(relative_path)
-    if not path.is_file():
-        _log_archive_error(image, relative_path, "file_missing")
-        raise ApiError(404, 30014, "文件归档中，请稍后重试")
 
-    # 本地文件读取本身没有超时参数，用线程池模拟部署配置的读取超时。
+    # 本地文件/对象存储读取本身没有超时参数，用线程池模拟部署配置的读取超时。
     # 注意不要用 with 语句：它会在退出时等待线程，导致超时失效。
     executor = ThreadPoolExecutor(max_workers=1)
     try:
-        future = executor.submit(path.read_bytes)
+        future = executor.submit(storage.read_bytes, relative_path)
         try:
             return future.result(timeout=settings.ARCHIVE_READ_TIMEOUT_SECONDS)
+        except ObjectNotFound:
+            _log_archive_error(image, relative_path, "file_missing")
+            raise ApiError(404, 30014, "文件归档中，请稍后重试") from None
         except FutureTimeoutError:
             _log_archive_error(image, relative_path, "timeout")
             raise ApiError(404, 30014, "文件归档中，请稍后重试") from None
-        except OSError as exc:
-            _log_archive_error(image, relative_path, f"storage_error: {exc}")
+        except StorageError as exc:
+            _log_archive_error(image, relative_path, f"storage_error: {exc.message}")
             raise ApiError(404, 30014, "文件归档中，请稍后重试") from exc
     finally:
         executor.shutdown(wait=False, cancel_futures=True)

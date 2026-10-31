@@ -20,6 +20,7 @@ from app.core.config import settings
 from app.core.deps import AuthContext, get_current_auth
 from app.core.response import ApiError
 from app.models.user import Role, User
+from app.modules.data.storage import ObjectNotFound, StorageError
 from app.modules.workspace.storage import storage
 
 SUPER_ADMIN_ROLE = "super_admin"
@@ -233,36 +234,44 @@ def read_storage_bytes(relative_path: str, *, archive_message: str | None = None
 
     归档路径按 ARCHIVE_READ_TIMEOUT_SECONDS 限制等待时间，超时按归档不可用处理。
     """
-    path = storage.path(relative_path)
-    if not path.is_file():
-        raise ApiError(404, 30014, archive_message or "文件不存在")
-
     timeout = settings.ARCHIVE_READ_TIMEOUT_SECONDS
     if timeout <= 0:
         try:
-            return path.read_bytes()
-        except OSError as exc:
+            return storage.read_bytes(relative_path)
+        except ObjectNotFound:
+            raise ApiError(404, 30014, archive_message or "文件不存在") from None
+        except StorageError as exc:
             raise ApiError(500, 50003, "存储服务错误") from exc
 
     pool = ThreadPoolExecutor(max_workers=1)
-    future = pool.submit(path.read_bytes)
+    future = pool.submit(storage.read_bytes, relative_path)
     try:
         return future.result(timeout=timeout)
     except FuturesTimeoutError as exc:
         raise ApiError(404, 30014, archive_message or "文件归档中，请稍后重试") from exc
-    except OSError as exc:
+    except ObjectNotFound:
+        raise ApiError(404, 30014, archive_message or "文件不存在") from None
+    except StorageError as exc:
         raise ApiError(500, 50003, "存储服务错误") from exc
     finally:
         # 不等待可能已卡住的读线程，避免请求被存储阻塞
         pool.shutdown(wait=False, cancel_futures=True)
 
 
-def file_response(relative_path: str, *, headers: dict[str, str]) -> FileResponse:
-    """返回热存储文件流；文件缺失或读取异常转为统一 JSON 错误。"""
-    path = storage.path(relative_path)
-    if not path.is_file():
-        raise ApiError(404, 30014, "文件不存在")
-    return FileResponse(path, media_type=media_type_for(path), headers=headers)
+def file_response(relative_path: str, *, headers: dict[str, str]) -> Response:
+    """返回热存储文件内容；本地后端保留 FileResponse 的缓存头与 Range 支持。"""
+    if storage.is_local:
+        path = storage.path(relative_path)
+        if not path.is_file():
+            raise ApiError(404, 30014, "文件不存在")
+        return FileResponse(path, media_type=media_type_for(path), headers=headers)
+    try:
+        data = storage.read_bytes(relative_path)
+    except ObjectNotFound:
+        raise ApiError(404, 30014, "文件不存在") from None
+    except StorageError as exc:
+        raise ApiError(500, 50003, "存储服务错误") from exc
+    return Response(content=data, media_type=media_type_for(relative_path), headers=headers)
 
 
 def bytes_response(data: bytes, *, media_type: str, headers: dict[str, str]) -> Response:

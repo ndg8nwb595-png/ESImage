@@ -29,6 +29,8 @@ os.environ.setdefault("JWT_SECRET", "test-only-secret-esimage-0123456789abcdef")
 os.environ.setdefault("CHAT_USE_STUB", "1")
 # 测试时不等待演示管线阶段停顿，并把本地存储放到独立的测试目录
 os.environ.setdefault("DEMO_PIPELINE_STAGE_DELAY", "0")
+# 测试强制使用本地存储，避免开发者 .env 中 STORAGE_BACKEND=minio 时依赖真实 MinIO
+os.environ["STORAGE_BACKEND"] = "local"
 os.environ.setdefault(
     "STORAGE_ROOT",
     str(Path(__file__).resolve().parent.parent / ".pytest_storage"),

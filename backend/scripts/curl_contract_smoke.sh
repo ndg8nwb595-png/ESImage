@@ -21,6 +21,8 @@ export JWT_SECRET="${JWT_SECRET:-contract-demo-secret-0123456789abcdef}"
 export PYTHONPATH=.
 export DEMO_PIPELINE_STAGE_DELAY="${DEMO_PIPELINE_STAGE_DELAY:-0.02}"
 export STORAGE_ROOT="${STORAGE_ROOT:-storage}"
+# 冒烟脚本使用独立本地目录，固定本地后端避免读取 backend/.env 的 MinIO 配置
+export STORAGE_BACKEND=local
 
 SUPER_USER="demo_super"
 SUPER_PASS="SuperAdmin123!"

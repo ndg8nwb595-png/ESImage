@@ -16,6 +16,7 @@ from app.core.request_id import RequestIDMiddleware
 from app.core.response import ApiError, error_body
 from app.modules.admin.router import router as admin_router
 from app.modules.contract.openapi import customize_openapi
+from app.modules.data.storage import ObjectNotFound, StorageError
 from app.modules.auth.router import router as auth_router
 from app.modules.chat.router import router as chat_router
 from app.modules.history.router import router as history_router
@@ -100,6 +101,19 @@ async def handle_database_error(request: Request, exc: SQLAlchemyError) -> JSONR
     """数据库异常 -> 500 + 50002（接口文档 §4 错误码表）。"""
     logger.exception("数据库异常: %s", exc)
     return JSONResponse(status_code=500, content=error_body(50002, "系统繁忙，请稍后重试"))
+
+
+@app.exception_handler(ObjectNotFound)
+async def handle_object_not_found(request: Request, exc: ObjectNotFound) -> JSONResponse:
+    """对象缺失 -> 404 + 30014。"""
+    return JSONResponse(status_code=404, content=error_body(30014, exc.message))
+
+
+@app.exception_handler(StorageError)
+async def handle_storage_error(request: Request, exc: StorageError) -> JSONResponse:
+    """存储服务异常 -> 500 + 50003；不向客户端暴露底层细节。"""
+    logger.error("存储异常: %s", exc.message)
+    return JSONResponse(status_code=500, content=error_body(50003, "存储服务错误"))
 
 
 @app.exception_handler(Exception)

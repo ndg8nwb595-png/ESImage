@@ -26,6 +26,8 @@ export PYTHONPATH=.
 export PYTHONUTF8=1
 export PYTHONIOENCODING=utf-8
 export STORAGE_ROOT=".curl_tmp/storage_history"
+# 脚本直接检查本地归档文件，必须固定本地后端，避免读取 backend/.env 的 MinIO 配置
+export STORAGE_BACKEND=local
 export ARCHIVE_READ_TIMEOUT_SECONDS="${ARCHIVE_READ_TIMEOUT_SECONDS:-60}"
 
 PORT="${PORT:-8020}"

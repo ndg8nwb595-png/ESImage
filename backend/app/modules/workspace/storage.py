@@ -1,56 +1,77 @@
-"""本地文件存储适配层。
+"""统一对象存储门面。
 
-最小 demo 用本地目录替代 MinIO，并简化了 10 号文档 §6.2 的路径层级：
-- 上传原图：uploads/{user_id}/{uuid}.{ext}
-- 生成原图：generated/{user_id}/{uuid}.png
-- 缩略图：thumbnails/{user_id}/{uuid}.webp
+业务文件（上传图、生成图、缩略图、归档件）统一通过本门面读写：
+- ``STORAGE_BACKEND=local``：落在 ``STORAGE_ROOT`` 目录，保持原有本地行为；
+- ``STORAGE_BACKEND=minio``：落在 MinIO 单桶 ``esimage``，对象键与本地目录一致。
 
-UUID 保证文件名不冲突；正式实现切换到 MinIO 时再按文档补 session_id / batch_id 层级。
+本地后端保留 ``path()`` 供脚本与兼容代码使用；MinIO 后端不暴露本地路径。
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import BinaryIO
 
-from app.core.config import settings
+from app.modules.data.storage import (
+    LocalStorageAdapter,
+    ObjectInfo,
+    ObjectNotFound,
+    StorageError,
+    get_storage,
+)
 
 
-class LocalStorage:
-    """限定在 STORAGE_ROOT 内的本地文件存储。"""
+class Storage:
+    """按配置委托给本地或 MinIO 适配器。"""
 
-    def __init__(self, root: Path | None = None) -> None:
-        self.root = (root or settings.STORAGE_ROOT).resolve()
-        self.root.mkdir(parents=True, exist_ok=True)
+    def __init__(self, backend=None) -> None:
+        # 允许测试注入后端，生产路径仍由 get_storage() 按环境变量选择
+        self._backend = backend if backend is not None else get_storage()
 
-    def _absolute(self, relative_path: str) -> Path:
-        """拼接绝对路径，并阻止路径穿越到存储根目录之外。"""
-        target = (self.root / relative_path).resolve()
-        if self.root not in target.parents and target != self.root:
-            raise ValueError(f"非法的存储路径：{relative_path}")
-        return target
+    @property
+    def is_local(self) -> bool:
+        return isinstance(self._backend, LocalStorageAdapter)
 
-    def save(self, relative_path: str, data: bytes) -> Path:
-        """写入文件，自动创建父目录。"""
-        target = self._absolute(relative_path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(data)
-        return target
+    def save(self, relative_path: str, data: bytes) -> ObjectInfo:
+        """写入对象，自动创建父目录（本地）或桶内前缀（MinIO）。"""
+        return self._backend.put_object(relative_path, data)
+
+    def read_bytes(self, relative_path: str) -> bytes:
+        """读取完整对象内容；缺失抛 :class:`ObjectNotFound`。"""
+        try:
+            content, _ = self._backend.get_object(relative_path)
+            return content
+        except (ObjectNotFound, StorageError):
+            raise
+        except OSError as exc:
+            # 本地磁盘错误统一归为存储服务错误，调用方只需处理 30014/50003
+            raise StorageError(50003, f"读取对象失败：{relative_path}") from exc
+
+    def open_stream(self, relative_path: str) -> BinaryIO:
+        """返回可读流；调用方负责关闭。"""
+        try:
+            return self._backend.open_object(relative_path)
+        except (ObjectNotFound, StorageError):
+            raise
+        except OSError as exc:
+            raise StorageError(50003, f"打开对象失败：{relative_path}") from exc
 
     def path(self, relative_path: str) -> Path:
-        """返回绝对路径；文件不存在时由调用方处理。"""
-        return self._absolute(relative_path)
+        """本地后端返回绝对路径；MinIO 后端显式拒绝。"""
+        if not self.is_local:
+            raise StorageError(50003, "MinIO 后端不支持本地路径")
+        return self._backend.local_path(relative_path)
 
     def exists(self, relative_path: str | None) -> bool:
-        return bool(relative_path) and self._absolute(relative_path).is_file()
+        if not relative_path:
+            return False
+        return self._backend.exists(relative_path)
 
     def delete(self, relative_path: str | None) -> None:
-        """删除文件；不存在时静默忽略。"""
+        """删除对象；不存在时静默忽略。"""
         if not relative_path:
             return
-        try:
-            self._absolute(relative_path).unlink(missing_ok=True)
-        except ValueError:
-            return
+        self._backend.delete_object(relative_path)
 
 
-storage = LocalStorage()
+storage = Storage()

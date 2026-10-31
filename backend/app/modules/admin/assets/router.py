@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -189,12 +190,15 @@ async def upload_material(
 
     token = uuid.uuid4().hex
     file_path = f"materials/{token}{extension}"
-    storage.save(file_path, data)
+    # MinIO 是同步网络调用，放到线程池避免阻塞事件循环
+    await run_in_threadpool(storage.save, file_path, data)
     try:
         thumbnail_path = f"materials/{token}.webp"
-        storage.save(thumbnail_path, make_thumbnail_webp(data))
+        await run_in_threadpool(
+            lambda: storage.save(thumbnail_path, make_thumbnail_webp(data))
+        )
     except Exception:
-        storage.delete(file_path)
+        await run_in_threadpool(storage.delete, file_path)
         raise
 
     material = MaterialAsset(

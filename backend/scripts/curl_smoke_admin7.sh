@@ -21,6 +21,8 @@ export DATABASE_URL
 export JWT_SECRET
 export PYTHONPATH=.
 export STORAGE_ROOT="${STORAGE_ROOT:-storage}"
+# 冒烟脚本使用独立本地目录，固定本地后端避免读取 backend/.env 的 MinIO 配置
+export STORAGE_BACKEND=local
 
 PYTHON_BIN="${PYTHON_BIN:-python}"
 PORT="${PORT:-8017}"
