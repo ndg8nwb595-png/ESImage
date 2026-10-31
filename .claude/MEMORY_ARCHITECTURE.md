@@ -28,10 +28,17 @@
 - **生成流程**：商品名称校验 → 1 张主图示例 → 用户确认 → 5 张详情图；合计 1 主图 + 5 详情图 = 6 张；尺寸不选默认 1:1、1000×1000。
 - **风格**：自由文本；不填由对话 Agent 推荐，后台不做风格配置；尺寸不选默认 1:1。
 - **失败策略**：除生图执行 Agent 外，Agent 失败重试 10 次（指数退避，封顶 30s）；生图执行每张最多尝试 2 次，2 次失败整批任务失败；整批超时 30 分钟。
+- **并发口径**：同一用户同时只允许 1 个 `queued` / `running` 批次；`sample_ready` 不占名额；确认全套时被确认的示例批次不参与并发校验。
+- **模板**：整套模板，定义 1 主图 + 5 详情图的视觉体系；不携带图片角色与尺寸。
 - **文字渲染**：模型留白 + 后端合成；版式由后续「设计 Skill」驱动，PRD 只定契约。
 - **角色**：固定普通用户/管理员/超管；账号 1~2 角色；禁止超管+管理员；超管权限包含管理员；超管可编辑权限点，管理员不可。
 - **技术栈**：React 18 + TypeScript + Ant Design 5；FastAPI + Celery；PostgreSQL 16；Redis 7；MinIO；Nginx；单机 Docker Compose。
-- **数据**：17 张表；热存 5 年 + 归档桶；每日备份保留 7 天；导出仅超管（ZIP+CSV）。
+- **数据**：18 张表；热存 5 年 + `archive/` 归档前缀；每日备份保留 7 天；导出仅超管（ZIP+CSV）。
+- **批次阶段**：`generation_batches.stage` 记录当前 Agent 阶段，取值见 10 号 §5；Worker 每阶段更新。
+- **模型配置**：`model_configs` 分 `text_model` / `image_model` / `vision_model`；视觉模型为空时质量审核跳过并标记「未校验」。
+- **平台规范**：规则（尺寸、违禁词、类目）写在 `platform_rule` Agent 的系统提示词中，通过提示词版本管理维护；不单独建规则表。
+- **参数恢复**：参数与上传图 ID 只存前端 localStorage；会话不持久化参数；上传图首次用于生成时回填 `session_id`。
+- **首条会话**：聊天与生成接口允许无 `session_id`，后端在同一事务内创建会话并写入首条消息/批次；用 `client_message_id` 去重。
 - **接口**：`/api/v1`、JWT Bearer、统一 `{code,message,data}`、分页 `{items,total,page,page_size}`、OpenAPI。
 - **文档**：12 份 PRD 存于 `docs/prd/`，命名 `数字-中文名prd.md`；新增后台模块按业务域并入现有文档。
 - **术语表**：仓库根目录 `GLOSSARY.md` 是唯一来源；`AGENTS.md` 的「Domain glossary」小节是同步镜像。新增或修改术语时，先改 `GLOSSARY.md`，再同步 `AGENTS.md`。

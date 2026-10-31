@@ -71,8 +71,8 @@
   - 风格为选填自由文本，填写时 1~50 字符。
   - 尺寸选填；未选时使用 1000×1000。
   - 上传图属于当前用户且未被删除。
-  - 模板与图片角色匹配。
-  - 用户没有进行中的生成批次。
+  - 模板存在且启用。
+  - 用户没有 `queued` / `running` 的生成批次；`sample_ready` 不计入。
 - 校验失败返回参数错误，不创建批次。
 
 ---
@@ -105,7 +105,7 @@ queued / running / sample_ready → cancelled
 | --- | --- |
 | `queued` | 已创建，等待 Worker |
 | `running` | 正在执行 Agent 链路 |
-| `sample_ready` | 示例图已生成，等待用户操作 |
+| `sample_ready` | 示例图已生成，等待用户操作；不占并发名额 |
 | `confirmed` | 用户已确认，已创建 `full` 批次 |
 | `failed` | 生成失败 |
 | `cancelled` | 用户取消 |
@@ -139,7 +139,7 @@ pending → generating → success / failed
 
 ### 3.6 状态机约束
 
-1. 同一用户同时只允许 1 个 `queued` / `running` / `sample_ready` 批次。
+1. 同一用户同时只允许 1 个 `queued` / `running` 批次；`sample_ready` 不计入并发。
 2. `confirmed` 只能从 `sample_ready` 进入。
 3. `full` 批次必须引用一个 `confirmed` 的 `sample` 批次。
 4. `cancelled` 是终态，不允许恢复。
@@ -323,7 +323,7 @@ pending → generating → success / failed
 }
 ```
 
-- 使用豆包视觉模型。
+- 使用后台模型配置中的 `vision_model`（豆包视觉模型）；未配置时跳过质量审核并标记「未校验」。
 - 检查：商品是否变形、留白区是否可用、是否出现违规内容。
 - 文字正确性由后端合成保证，不由视觉审核负责。
 - 不通过时交给修复 Agent。
@@ -340,7 +340,7 @@ pending → generating → success / failed
 
 #### 4.3.8 平台规范 Agent
 
-**输入**：文案、尺寸、商品类目。
+**输入**：文案、尺寸、商品类目、平台规范内容（来自 `platform_rule` 系统提示词）。
 
 **输出**：规范检查结果。
 
@@ -357,6 +357,7 @@ pending → generating → success / failed
 ```
 
 - 检查尺寸是否符合平台要求、文案是否含违禁词、类目是否有特殊限制。
+- 平台规范规则（尺寸、违禁词、类目）统一维护在 `platform_rule` Agent 的系统提示词中，后台通过提示词版本管理保存与回滚；`{{platform_rules}}` 从该提示词读取，不单独建规则表。
 - 不通过时标记该张失败，提示用户调整文案或参数；不自动重试。
 
 ---
@@ -392,6 +393,7 @@ pending → generating → success / failed
 - 结果区只展示最新 `sample_ready` 批次的示例图。
 - 旧示例批次状态保持不变（`sample_ready` 或 `failed` / `cancelled`），供后台追溯。
 - 只有最新一次 `sample_ready` 的示例可以确认；旧示例不能确认。
+- 旧示例不占并发名额；在无 `queued` / `running` 批次时，用户可重新生成示例或确认最新示例。
 
 ### 5.5 示例图属性
 
@@ -410,7 +412,7 @@ pending → generating → success / failed
    - 示例批次属于当前用户。
    - 示例批次状态为 `sample_ready`。
    - 示例批次是最新可确认批次。
-   - 用户没有进行中的批次。
+   - 用户没有 `queued` / `running` 的批次；被确认的 `sample_ready` 示例批次不参与并发校验。
 3. 创建 `full` 批次：
    - `batch_type=full`
    - `source_sample_batch_id=<示例批次>`
@@ -418,6 +420,7 @@ pending → generating → success / failed
    - `completed_count=1`（示例图）
    - 状态 `queued`
 4. 示例批次状态置 `confirmed`。
+5. 确认操作在数据库事务中执行，对示例批次加行锁；若已被确认或状态不是 `sample_ready`，返回 `30005`。
 
 ### 6.2 复用示例结果
 
@@ -446,6 +449,7 @@ pending → generating → success / failed
 
 - 前端每 2 秒轮询 `GET /api/v1/generations/{batch_id}`。
 - 返回阶段、已完成张数、总张数、当前图片状态。
+- 阶段字段来自 `generation_batches.stage`，Worker 每进入一个阶段更新；前端直接读取，不额外查询 `agent_runs`。
 - 阶段展示：需求理解 → 文案生成 → 提示词构建 → 图像绘制 → 质量审核 → 文字合成。
 - 轮询在页面隐藏时降低频率（如 10 秒），恢复可见后立即刷新。
 
@@ -551,9 +555,9 @@ pending → generating → success / failed
 
 ### 8.6 重复提交
 
-- 前端在批次进行中禁用生成按钮。
+- 前端在存在 `queued` / `running` 批次时禁用生成按钮；`sample_ready` 不阻塞。
 - 后端用 `client_request_id` 做幂等：同一请求重复提交返回已有批次，不重复创建。
-- 同一用户并发创建批次返回业务错误「已有生成任务进行中」。
+- 同一用户并发创建 `queued` / `running` 批次返回业务错误「已有生成任务进行中」。
 
 ---
 
@@ -615,7 +619,6 @@ pending → generating → success / failed
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
 | 名称 | 是 | 1~50 字符 |
-| 适用图片角色 | 是 | 主图 / 详情图 |
 | 风格文案 | 否 | 自由文本，作为默认风格 |
 | 缩略图 | 是 | JPG/PNG/WEBP，≤10MB |
 | 提示词模板 | 否 | 作为提示词 Agent 的参考 |
@@ -625,10 +628,11 @@ pending → generating → success / failed
 
 #### 规则
 
+- 模板定义整套 6 张图（1 主图 + 5 详情图）的视觉体系，不区分主图/详情图模板，不携带尺寸。
 - 新增、编辑、启用/停用、排序。
 - 不做物理删除；被停用的模板不再出现在用户端。
 - 已被批次引用的模板，其快照保存在 `params_snapshot`，模板后续修改不影响历史记录。
-- 列表支持按图片角色、状态筛选。
+- 列表支持按状态筛选。
 
 ### 10.2 素材库
 
@@ -674,6 +678,7 @@ pending → generating → success / failed
 - 管理员可新增、编辑、启用/停用。
 - 用户端始终保留「自定义宽高」。
 - 自定义宽高的可用范围由后端按豆包模型能力校验。
+- 尺寸预设存储于 `size_presets` 表，后台可增删改、启用/停用。
 
 ### 10.5 配置缓存
 
@@ -715,7 +720,7 @@ pending → generating → success / failed
 9. 结果区支持预览、单张下载、整组 ZIP、重生成、重试失败张。
 10. 历史作品只展示最终成功图。
 11. 模板、素材、尺寸可后台维护；风格由用户填写或 Agent 推荐，不做后台配置。
-12. 同一用户同时只能有 1 个进行中的批次。
+12. 同一用户同时只能有 1 个 `queued` / `running` 批次；`sample_ready` 不占名额，旧示例不阻塞重新生成或确认。
 
 ---
 

@@ -113,12 +113,14 @@ Authorization: Bearer <jwt>
 | 场景 | 幂等键 | 规则 |
 | --- | --- | --- |
 | 发送聊天消息 | `client_message_id` | 同一会话内唯一；重复请求返回已保存消息 |
+| 首条消息建会话 | `client_message_id` | 同一用户 + `client_message_id` 去重；重复请求返回同一会话，不重复创建 |
 | 创建生成批次 | `client_request_id` | 全局唯一；重复请求返回已有批次 |
 | 导出任务 | 同一超管同时只允许 1 个 | 重复提交返回已有任务 |
 
 ### 2.6 并发限制
 
-- 同一用户同时只允许 1 个进行中的生成批次。
+- 同一用户同时只允许 1 个 `queued` / `running` 的生成批次；`sample_ready` 为等待用户操作，不计入并发。
+- 确认全套时，被确认的 `sample_ready` 示例批次不参与该并发校验。
 - 同一超管同时只允许 1 个导出任务。
 - 超出限制返回 `30003` 或 `30008`。
 
@@ -159,7 +161,6 @@ Authorization: Bearer <jwt>
 | 30009 | 409 | 角色组合不合法 |
 | 30010 | 409 | 用户名已存在 |
 | 30011 | 409 | 必须保留至少一个可用超管 |
-| 30012 | 400 | 模板与图片角色不匹配 |
 | 30013 | 404 | 会话不存在 |
 | 30014 | 404 | 文件不存在或归档不可用 |
 | 30015 | 409 | 权限点不可授予该角色 |
@@ -167,6 +168,8 @@ Authorization: Bearer <jwt>
 | 50001 | 500 | 系统内部错误 |
 | 50002 | 500 | 数据库错误 |
 | 50003 | 500 | 存储服务错误 |
+
+> 30012 原用于「模板与图片角色不匹配」。模板改为整套模板后该错误废弃，编号保留不复用。
 
 ### 3.2 错误响应示例
 
@@ -233,10 +236,11 @@ Authorization: Bearer <jwt>
 | 方法/路径 | 权限 | 说明 |
 | --- | --- | --- |
 | `GET /api/v1/sizes` | `user.workspace` | 启用中的尺寸预设；未选择时默认 1000×1000 |
-| `GET /api/v1/templates?image_role=main` | `user.workspace` | 启用中的模板卡片 |
+| `GET /api/v1/templates` | `user.workspace` | 启用中的整套模板卡片 |
 | `GET /api/v1/materials?tag=` | `user.workspace` | 内部使用；用户端不直接展示 |
 
 > 风格为自由文本，不提供 `/styles` 配置接口，也不在后台维护风格列表。
+> 模板为整套模板，不区分主图/详情图，不携带尺寸。
 
 ### 5.2 上传
 
@@ -252,6 +256,9 @@ Authorization: Bearer <jwt>
 | 方法/路径 | 权限 | 说明 |
 | --- | --- | --- |
 | `DELETE /api/v1/uploads/{upload_id}` | `user.generate` | 从当前会话移除上传图（软删除） |
+| `GET /api/v1/uploads/{upload_id}` | `user.generate` | 读取当前用户上传图元数据与缩略图地址（localStorage 恢复用） |
+
+> 上传图在首次用于生成时回填 `session_id`；未使用前可为空。
 
 ### 5.3 会话
 
@@ -262,6 +269,9 @@ Authorization: Bearer <jwt>
 | `PATCH /api/v1/sessions/{id}` | `user.workspace` | 重命名，`{ title }` |
 | `DELETE /api/v1/sessions/{id}` | `user.workspace` | 软删除，状态置 `hidden` |
 | `GET /api/v1/sessions/{id}/messages` | `user.workspace` | 分页获取消息 |
+
+> `POST /sessions` 仅用于显式创建；首条消息与生成可在无会话时由后端原子创建。
+> 参数面板内容不通过会话详情接口持久化；参数与上传图 ID 由前端 localStorage 保存。
 
 **创建会话请求**
 
@@ -278,10 +288,10 @@ Authorization: Bearer <jwt>
 
 | 项目 | 内容 |
 | --- | --- |
-| 方法/路径 | `POST /api/v1/sessions/{id}/messages` |
+| 方法/路径 | 已有会话：`POST /api/v1/sessions/{id}/messages`；首条消息：`POST /api/v1/sessions/messages`（`session_id` 可为空） |
 | 鉴权 | `user.workspace` |
 | 请求头 | `Accept: text/event-stream` |
-| 请求体 | `{ client_message_id, content }` |
+| 请求体 | `{ client_message_id, content, params, session_id? }`；首条消息可传 `session_id: null`；`params` 由前端 localStorage 读取，仅用于本轮上下文 |
 | 响应 | SSE 事件流 |
 | 说明 | 只调用规划 + 商品理解两个 Agent |
 
@@ -318,6 +328,7 @@ Authorization: Bearer <jwt>
 ```
 
 - `style_text`、`width`、`height`、`template_id`、`upload_ids` 均为选填；`width`/`height` 省略时默认 1000×1000。
+- `session_id` 可为空；为空时后端在同一事务内创建会话。
 - 请求不再包含 `output_type`；每次固定生成 1 张主图 + 5 张详情图。
 
 **批次状态响应**
@@ -344,6 +355,8 @@ Authorization: Bearer <jwt>
   }
 }
 ```
+
+- `stage` 取自 `generation_batches.stage`，取值见 `10-数据模型与存储prd.md` §5；`queued` 时为空。
 
 **确认请求**
 
@@ -486,6 +499,7 @@ Authorization: Bearer <jwt>
   "api_key": "******",
   "text_model": "doubao-xxx",
   "image_model": "doubao-seedream-xxx",
+  "vision_model": "doubao-vision-xxx",
   "temperature": 0.7,
   "timeout_seconds": 120,
   "concurrency": 4,
@@ -564,9 +578,18 @@ Content-Type: application/json
 
 {
   "client_message_id": "uuid",
-  "content": "帮我做一套图"
+  "content": "帮我做一套图",
+  "params": {
+    "product_name": "秋季通勤衬衫",
+    "style_text": "简洁白底",
+    "width": 1000,
+    "height": 1000,
+    "template_id": 5
+  }
 }
 ```
+
+- 首条消息可调用 `/api/v1/sessions/messages` 并传 `session_id: null`；`meta` 事件返回新建的 `session_id`。
 
 ### 7.2 事件
 

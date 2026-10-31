@@ -21,7 +21,7 @@
 
 ### 1.2 本期范围
 
-- PostgreSQL 16 的 17 张业务表。
+- PostgreSQL 16 的 18 张业务表。
 - 字段类型、空值、默认值、约束、索引。
 - 实体关系与外键策略。
 - 枚举值字典。
@@ -82,7 +82,7 @@ users ──< user_roles >── roles ──< role_permissions >── permissi
 system_prompts ──< prompt_versions
 audit_logs（独立）
 model_configs（单条启用配置）
-templates / material_assets（被批次快照引用，不做外键）
+templates / material_assets / size_presets（被批次快照引用或独立配置，不做外键）
 ```
 
 ### 3.1 关系说明
@@ -211,6 +211,8 @@ templates / material_assets（被批次快照引用，不做外键）
 | `created_at` | TIMESTAMPTZ | 否 | `now()` | 创建时间 |
 | `updated_at` | TIMESTAMPTZ | 否 | `now()` | 更新时间 |
 
+> 会话不持久化参数面板内容；参数由前端 localStorage 保存，生成批次快照存于 `generation_batches.params_snapshot`。
+
 **约束与索引**
 
 - `ck_sessions_status`：`status IN ('active','hidden')`。
@@ -238,6 +240,7 @@ templates / material_assets（被批次快照引用，不做外键）
 - `ck_messages_role`：`role IN ('user','assistant','system')`。
 - `ck_messages_status`：`status IN ('sending','done','failed')`。
 - `uq_messages_session_client`：`UNIQUE (session_id, client_message_id)`（部分索引，`client_message_id IS NOT NULL`）。
+- 首条消息建会话使用 Redis 短期幂等键 `(user_id, client_message_id)` 去重，避免并发创建两个会话。
 - `idx_messages_session_time`：`(session_id, created_at)`。
 - `idx_messages_created_at`：`(created_at DESC)`。
 - 可选 `idx_messages_content_trgm`：`GIN (content gin_trgm_ops)`，用于关键词搜索。
@@ -290,6 +293,7 @@ templates / material_assets（被批次快照引用，不做外键）
 | `total_count` | INT | 否 | — | 计划张数 |
 | `completed_count` | INT | 否 | 0 | 已完成张数 |
 | `status` | VARCHAR(20) | 否 | `queued` | 批次状态 |
+| `stage` | VARCHAR(32) | 是 | NULL | 当前阶段：Agent code / `text_composition` / `done`；`queued` 时为空 |
 | `params_snapshot` | JSONB | 否 | — | 参数快照 |
 | `requirement_summary` | JSONB | 是 | NULL | 生成时需求摘要 |
 | `error_message` | TEXT | 是 | NULL | 失败原因 |
@@ -303,6 +307,7 @@ templates / material_assets（被批次快照引用，不做外键）
 
 - `ck_batches_type`：`batch_type IN ('sample','full')`。
 - `ck_batches_status`：`status IN ('queued','running','sample_ready','confirmed','completed','partially_failed','failed','cancelled')`。
+- `ck_batches_stage`：`stage IS NULL OR stage IN ('planner','product_understanding','copywriter','prompt_builder','image_generator','quality_reviewer','repairer','platform_rule','text_composition','done')`。
 - `ck_batches_source`：`batch_type='full'` 时 `source_sample_batch_id IS NOT NULL`；`batch_type='sample'` 时为空。
 - `uq_batches_client_request`：`UNIQUE (client_request_id)`（部分索引）。
 - `idx_batches_user_time`：`(user_id, created_at DESC)`。
@@ -356,7 +361,7 @@ templates / material_assets（被批次快照引用，不做外键）
 | --- | --- | --- | --- | --- |
 | `id` | BIGSERIAL | 否 | — | 主键 |
 | `user_id` | BIGINT | 否 | — | 外键 `users.id` |
-| `session_id` | BIGINT | 是 | NULL | 外键 `creative_sessions.id` |
+| `session_id` | BIGINT | 是 | NULL | 外键 `creative_sessions.id`；首次用于生成时回填，未使用前为空 |
 | `file_path` | TEXT | 否 | — | MinIO 对象路径 |
 | `thumbnail_path` | TEXT | 是 | NULL | 缩略图路径 |
 | `original_name` | VARCHAR(255) | 否 | — | 原始文件名 |
@@ -382,7 +387,6 @@ templates / material_assets（被批次快照引用，不做外键）
 | --- | --- | --- | --- | --- |
 | `id` | BIGSERIAL | 否 | — | 主键 |
 | `name` | VARCHAR(50) | 否 | — | 模板名称 |
-| `image_role` | VARCHAR(16) | 否 | — | `main` / `detail` |
 | `style_text` | VARCHAR(50) | 是 | NULL | 默认风格文案，自由文本 |
 | `thumbnail_path` | TEXT | 否 | — | 缩略图 |
 | `prompt_template` | TEXT | 是 | NULL | 提示词模板 |
@@ -395,9 +399,8 @@ templates / material_assets（被批次快照引用，不做外键）
 
 **约束与索引**
 
-- `ck_templates_image_role`：`image_role IN ('main','detail')`。
 - `ck_templates_status`：`status IN ('active','disabled')`。
-- `idx_templates_status_role_sort`：`(status, image_role, sort_order)`。
+- `idx_templates_status_sort`：`(status, sort_order)`。
 
 ### 4.13 `material_assets` 素材库
 
@@ -431,6 +434,7 @@ templates / material_assets（被批次快照引用，不做外键）
 | `api_key_ciphertext` | TEXT | 是 | NULL | 加密后的 API Key |
 | `text_model` | VARCHAR(100) | 否 | — | 文本模型名 |
 | `image_model` | VARCHAR(100) | 否 | — | 图像模型名 |
+| `vision_model` | VARCHAR(100) | 是 | NULL | 视觉模型名；为空时质量审核跳过并标记 |
 | `temperature` | NUMERIC(3,1) | 否 | 0.7 | 0.0~2.0 |
 | `timeout_seconds` | INT | 否 | 120 | 30~300 |
 | `concurrency` | INT | 否 | 4 | 1~16 |
@@ -511,6 +515,36 @@ templates / material_assets（被批次快照引用，不做外键）
 - `idx_audit_action`：`(action, created_at DESC)`。
 - `idx_audit_target`：`(target_type, target_id)`。
 
+### 4.18 `size_presets` 尺寸预设
+
+| 字段 | 类型 | 空 | 默认 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | BIGSERIAL | 否 | — | 主键 |
+| `platform_name` | VARCHAR(50) | 否 | — | 平台名称，如淘宝/天猫 |
+| `width` | INT | 否 | — | 宽，正整数 |
+| `height` | INT | 否 | — | 高，正整数 |
+| `sort_order` | INT | 否 | 0 | 排序 |
+| `status` | VARCHAR(16) | 否 | `active` | `active` / `disabled` |
+| `created_by` | BIGINT | 是 | NULL | 创建人 |
+| `created_at` | TIMESTAMPTZ | 否 | `now()` | 创建时间 |
+| `updated_at` | TIMESTAMPTZ | 否 | `now()` | 更新时间 |
+
+**约束与索引**
+
+- `ck_sizes_positive`：`width > 0 AND height > 0`。
+- `ck_sizes_status`：`status IN ('active','disabled')`。
+- `uq_sizes_platform_size`：`UNIQUE (platform_name, width, height)`。
+- `idx_sizes_status_sort`：`(status, sort_order)`。
+
+**种子数据**
+
+| 平台名称 | 宽 | 高 |
+| --- | --- | --- |
+| 淘宝/天猫 | 1000 | 1000 |
+| 京东 | 1000 | 1000 |
+| 拼多多 | 1000 | 1000 |
+| 抖音 | 1000 | 1000 |
+
 ---
 
 ## 5. 枚举字典
@@ -525,11 +559,12 @@ templates / material_assets（被批次快照引用，不做外键）
 | 消息状态 | `sending` / `done` / `failed` |
 | Agent 运行状态 | `success` / `failed` / `skipped` |
 | 批次类型 | `sample` 示例 / `full` 全套 |
-| 图片角色 | `main` 主图 / `detail` 详情图（用于 `generated_images.image_role` 与 `templates.image_role`） |
+| 图片角色 | `main` 主图 / `detail` 详情图（用于 `generated_images.image_role`） |
 | 批次状态 | `queued` / `running` / `sample_ready` / `confirmed` / `completed` / `partially_failed` / `failed` / `cancelled` |
+| 批次阶段 | `planner` / `product_understanding` / `copywriter` / `prompt_builder` / `image_generator` / `quality_reviewer` / `repairer` / `platform_rule` / `text_composition` / `done` |
 | 图片类型 | `sample` 示例 / `final` 正式 |
 | 图片状态 | `pending` / `generating` / `success` / `failed` / `cancelled` / `superseded` |
-| 模板/素材状态 | `active` 启用 / `disabled` 停用 |
+| 模板/素材/尺寸预设状态 | `active` 启用 / `disabled` 停用 |
 | 审计结果 | `success` / `failed` |
 
 **批次状态与类型约束**
@@ -672,8 +707,8 @@ templates / material_assets（被批次快照引用，不做外键）
 | 权限点 | 第 11 章清单 |
 | 超管角色权限 | 全部权限点（用于展示；逻辑上仍绕过） |
 | 风格 | 不预置风格表；风格由用户填写或 Agent 推荐 |
-| 尺寸 | 淘宝/天猫、京东、拼多多、抖音，均 1000×1000 |
-| 系统提示词 | 8 个 Agent 各一条初始提示词 |
+| 尺寸预设 | `size_presets` 种子：淘宝/天猫、京东、拼多多、抖音，均 1000×1000 |
+| 系统提示词 | 8 个 Agent 各一条初始提示词；`platform_rule` 含平台规范初始规则 |
 | 模型配置 | 一条默认配置，`api_key` 为空，等待超管填写 |
 | 超管账号 | 首次部署通过初始化脚本创建，密码由部署人设置 |
 
@@ -695,7 +730,7 @@ templates / material_assets（被批次快照引用，不做外键）
 
 ## 12. 验收标准
 
-1. 17 张表按本文档创建，字段类型、空值、默认值、约束一致。
+1. 18 张表按本文档创建，字段类型、空值、默认值、约束一致。
 2. 外键不级联删除；删除账号为软删除，历史数据保留。
 3. 用户名唯一约束包含已删除账号。
 4. 角色组合规则在应用层生效，超管+管理员被拒绝。
