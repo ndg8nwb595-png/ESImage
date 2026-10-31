@@ -621,3 +621,24 @@
 - 记忆文档提交 `6638391`；rebase 到最新 `origin/main`（`5c4f05d`）时五个记忆文档与并行会话的会话 12/13 记录冲突，按「双方内容全部保留」解决。
 - 功能分支推送 `origin/feat/login-minimal-demo`，随后 `--ff-only` 合并到 `main` 并推送。
 - 未提交仓库根 `SKILL.md`（frontend-design 技能副本，用户要求安装到全局，与本需求无关）。
+
+### 会话 14 补充：接口文档一致性校验（curl）
+
+按 `docs/prd/1-登录界面/接口文档-登录最小demo.md` 用 curl 逐项校验三个接口，发现并修正 2 处偏差：
+
+1. `remember_me` 非严格布尔：Pydantic 默认宽松模式会把 `"yes"` / `1` 转换为 `true`，从而签发 7 天 token；改为 `StrictBool`，非布尔值返回 400 `10003`「参数格式错误」。
+2. 缺少 `50002` 数据库错误码：文档 §4 标注「本次是否使用：是」，原实现只有 50001；新增 `SQLAlchemyError` 异常处理器，返回 500 + `50002`「系统繁忙，请稍后重试」。
+
+新增测试 4 个（`remember_me` 传 `"yes"`/`1`/`"true"` + 模拟数据库异常），`pytest` 由 31 增至 **35 passed**。
+
+curl 校验通过项（真实服务 127.0.0.1:8000）：
+
+- 登录成功：三个演示账号均 200；`code=0`、`message="ok"`；`data` 含 `token`/`expires_at`/`user{id,username,display_name,avatar_url:null,roles,permissions}`；用户名首尾空格被去除。
+- JWT：载荷含 `sub`(string)/`iat`/`exp`/`token_version`/`roles`/`permissions`；默认 24h（86400s）、`remember_me=true` 7 天（604800s）；`expires_at` 与 `exp` 同一时刻，ISO 8601 + `+08:00`。
+- 参数错误：`{}` 与全空格用户名 → 400 `10002`「请输入用户名」；缺密码/空密码 → `10002`「请输入密码」；用户名 3 位/21 位/含横线 → `10003`；密码 7 位/33 位 → `10003`；非法 JSON、`text/plain`、`remember_me` 非布尔 → `10003`「参数格式错误」；无请求体 → `10002`「缺少必填参数」。
+- 凭据错误：错误密码、未知账号、禁用账号登录、密码带空格、用户名大小写不符 → 统一 401 `20001`「用户名或密码错误」。
+- `/auth/me`：正常 200 且结构为 `{user{id,username,display_name,avatar_url}, roles, permissions}`；无 token / 非 Bearer / 空 Bearer / 乱码 → 401 `20003`；过期 → 401 `20002`「登录已过期」；`token_version` 不符 / 用户不存在 / `sub` 非数字 → 401 `20003`；禁用账号 → 403 `20004`「账号不可用」；token 内伪造 `super_admin` 角色不被信任，仍返回数据库中的真实角色。
+- 退出登录：正常 200 `data=null`；无 token / 乱码 → `20003`；过期 → `20002`。
+- 审计：登录成功/失败/退出均落 `audit_logs`；失败 `detail={"reason":"bad_credentials"}`；未知账号 `user_id` 为空；全部记录不含密码（SQL 检索 `Demo1234` 计数为 0）。
+- 响应头：`content-type: application/json`（未带 `charset=utf-8`，JSON 本身固定 UTF-8，与文档的写法属等价表述）。
+- 未覆盖：`50002` 无法通过 curl 安全触发，改由 pytest 依赖覆盖模拟数据库异常验证。

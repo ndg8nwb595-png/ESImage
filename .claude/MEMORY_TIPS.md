@@ -94,3 +94,8 @@
 - **无 Alembic 的测试库用 `drop_all/create_all`**：在 conftest 里用独立数据库 `esimage_test`，并在导入应用前覆盖 `DATABASE_URL`，避免测试清空开发数据。
 - **提交前先 fetch/rebase**：并行会话会持续推进 `main`，直接在旧基线上提交会导致 push 被拒；先 `git fetch` + `git rebase origin/main`。
 - **记忆文档要在 rebase 之后再写**：并行会话可能已更新 `.claude/MEMORY_*.md`；先 rebase 到最新 `main` 再追加，否则必冲突。
+- **Pydantic v2 的 `bool` 是宽松模式**：`"yes"`、`1`、`"true"` 都会被转成 `True`，接口文档写 `boolean` 时要用 `StrictBool`，否则非法类型会被静默接受。
+- **接口文档的错误码表要逐项对齐实现**：文档标注「本次是否使用」的码（如 `50002` 数据库错误）必须真的能产生；用 `grep -rn "50002" app/` 确认，没有就补处理器或回报文档。
+- **curl 校验要覆盖“成功 + 每种失败”**：成功看字段与类型，失败看 HTTP 状态、业务码、message、`data=null` 四件套；过期/版本不符/伪造角色等 token 用例可用后端密钥现签，避免改库。
+- **Windows 下的 venv Python 读不到 Git Bash 的 `/tmp`**：`/tmp/x.json` 在 Windows Python 里不存在，且默认 `open()` 用 GBK；临时文件放仓库内相对路径并显式 `encoding="utf-8"`。
+- **验证改动的服务要重启**：uvicorn 未开 `--reload` 时，改完代码必须停掉后台任务再启动，否则 curl 仍打到旧进程。
