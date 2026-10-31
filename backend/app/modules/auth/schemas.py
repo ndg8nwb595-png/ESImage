@@ -17,3 +17,12 @@ class LoginRequest(BaseModel):
     password: str | None = None
     # 接口文档规定为 boolean；StrictBool 避免 "yes"/1 等值被宽松转换为 true
     remember_me: StrictBool = False
+
+
+class PasswordChangeRequest(BaseModel):
+    """修改密码请求。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    old_password: str | None = None
+    new_password: str | None = None
