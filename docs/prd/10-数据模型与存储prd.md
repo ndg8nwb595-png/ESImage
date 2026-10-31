@@ -8,7 +8,7 @@
 | 编写日期 | 2026-10-31 |
 | 文档状态 | 待评审 |
 | 上游文档 | `0-系统汇总prd.md` |
-| 关联文档 | `4-生图任务与结果/4-生图任务与结果prd.md`、`6-管理后台-账号与权限/6-管理后台-账号与权限prd.md`、`7-管理后台-用户与生图记录prd.md`、`9-后端服务与接口prd.md` |
+| 关联文档 | `4-生图任务与结果/4-生图任务与结果prd.md`、`6-管理后台-账号与权限/6-管理后台-账号与权限prd.md`、`7-管理后台-用户与生图记录/7-管理后台-用户与生图记录prd.md`、`9-后端服务与接口prd.md` |
 | 术语依据 | `GLOSSARY.md` |
 
 ---
@@ -111,7 +111,7 @@ templates / material_assets / size_presets（被批次快照引用或独立配�
 | `username` | VARCHAR(20) | 否 | — | 登录名，全局唯一，含已删除账号 |
 | `display_name` | VARCHAR(30) | 否 | — | 显示名 |
 | `password_hash` | VARCHAR(255) | 否 | — | bcrypt 哈希 |
-| `avatar_path` | TEXT | 是 | NULL | MinIO 对象路径 |
+| `avatar_path` | TEXT | 是 | NULL | MinIO 对象路径（预留字段，本期不做头像上传，恒为 NULL） |
 | `email` | VARCHAR(255) | 是 | NULL | 选填 |
 | `status` | VARCHAR(16) | 否 | `active` | `active` / `disabled` / `deleted` |
 | `token_version` | INT | 否 | 0 | 改密/禁用/删除时递增，旧 token 失效 |
@@ -243,7 +243,7 @@ templates / material_assets / size_presets（被批次快照引用或独立配�
 - 首条消息建会话使用 Redis 短期幂等键（TTL 60 秒）`(user_id, client_message_id)` 去重，避免并发创建两个会话。
 - `idx_messages_session_time`：`(session_id, created_at)`。
 - `idx_messages_created_at`：`(created_at DESC)`。
-- 可选 `idx_messages_content_trgm`：`GIN (content gin_trgm_ops)`，用于关键词搜索。
+- 可选 `idx_messages_content_trgm`：`GIN (content gin_trgm_ops)`，用于关键词搜索。**本期不启用**（内网数据量小，`ILIKE` 全表扫描可接受）；数据量大时启用 pg_trgm 扩展与索引。
 
 ### 4.8 `agent_runs` Agent 调用记录
 
@@ -259,8 +259,8 @@ templates / material_assets / size_presets（被批次快照引用或独立配�
 | `model_name` | VARCHAR(100) | 是 | NULL | 模型名 |
 | `input_summary` | TEXT | 是 | NULL | 输入摘要 |
 | `output_summary` | TEXT | 是 | NULL | 输出摘要 |
-| `input_full` | TEXT | 是 | NULL | 完整输入（超管可看） |
-| `output_full` | TEXT | 是 | NULL | 完整输出（超管可看） |
+| `input_full` | TEXT | 是 | NULL | 完整输入（超管可看；**存储前已脱敏** API Key 等敏感字段） |
+| `output_full` | TEXT | 是 | NULL | 完整输出（超管可看；**存储前已脱敏** API Key 等敏感字段） |
 | `prompt_tokens` | INT | 否 | 0 | 输入 Token |
 | `completion_tokens` | INT | 否 | 0 | 输出 Token |
 | `latency_ms` | INT | 是 | NULL | 耗时 |
@@ -330,7 +330,7 @@ templates / material_assets / size_presets（被批次快照引用或独立配�
 | `status` | VARCHAR(16) | 否 | `pending` | 图片状态 |
 | `source_image_id` | BIGINT | 是 | NULL | 复用/替代来源 |
 | `file_path` | TEXT | 是 | NULL | MinIO 对象路径 |
-| `thumbnail_path` | TEXT | 是 | NULL | 缩略图路径 |
+| `thumbnail_path` | TEXT | 是 | NULL | 缩略图路径（生图成功、文字合成后由 Worker 同步生成） |
 | `width` | INT | 是 | NULL | 宽 |
 | `height` | INT | 是 | NULL | 高 |
 | `prompt` | TEXT | 是 | NULL | 最终提示词 |
@@ -363,7 +363,7 @@ templates / material_assets / size_presets（被批次快照引用或独立配�
 | `user_id` | BIGINT | 否 | — | 外键 `users.id` |
 | `session_id` | BIGINT | 是 | NULL | 外键 `creative_sessions.id`；首次用于生成时回填，未使用前为空 |
 | `file_path` | TEXT | 否 | — | MinIO 对象路径 |
-| `thumbnail_path` | TEXT | 是 | NULL | 缩略图路径 |
+| `thumbnail_path` | TEXT | 是 | NULL | 缩略图路径（上传时生成） |
 | `original_name` | VARCHAR(255) | 否 | — | 原始文件名 |
 | `mime_type` | VARCHAR(100) | 否 | — | MIME |
 | `size_bytes` | BIGINT | 否 | — | 文件大小 |
@@ -591,7 +591,7 @@ templates / material_assets / size_presets（被批次快照引用或独立配�
 | `exports/` | 数据导出 ZIP |
 | `templates/` | 模板缩略图与参考图 |
 | `materials/` | 素材库文件 |
-| `avatars/` | 用户头像 |
+| `avatars/` | 用户头像（预留；本期不做头像上传） |
 
 ### 6.2 路径规则
 
@@ -604,7 +604,7 @@ templates / material_assets / size_presets（被批次快照引用或独立配�
 | 导出 | `exports/{admin_user_id}/{job_id}.zip` |
 | 模板 | `templates/{template_id}/{uuid}.{ext}` |
 | 素材 | `materials/{material_id}/{uuid}.{ext}` |
-| 头像 | `avatars/{user_id}/{uuid}.{ext}` |
+| 头像（预留） | `avatars/{user_id}/{uuid}.{ext}`（本期不使用） |
 
 ### 6.3 文件规则
 
@@ -689,7 +689,7 @@ templates / material_assets / size_presets（被批次快照引用或独立配�
 
 ## 9. 数据导出
 
-- 导出逻辑与文件结构见 `7-管理后台-用户与生图记录prd.md` 第 8 章。
+- 导出逻辑与文件结构见 `7-管理后台-用户与生图记录/7-管理后台-用户与生图记录prd.md` 第 8 章。
 - 导出 ZIP 存于 `exports/`，状态存 Redis，TTL 24 小时。
 - 不新增导出任务表。
 - 导出内容不含密码哈希、API Key、JWT。
@@ -756,10 +756,12 @@ templates / material_assets / size_presets（被批次快照引用或独立配�
 
 ## 13. 待确认项
 
-| 序号 | 事项 | 当前处理 |
+> 以下事项已于 2026-10-31 细化评审中确定。
+
+| 序号 | 事项 | 结论 |
 | --- | --- | --- |
-| 1 | `chat_messages.content` 是否启用 pg_trgm 全文索引 | 本期可选，数据量大时启用 |
-| 2 | 归档后缩略图是否也归档 | 本期缩略图保持热存 |
-| 3 | 备份是否复制到远端对象存储 | 本期先本地备份卷，远端可选 |
-| 4 | 初始超管账号的创建方式 | 部署脚本初始化，禁止弱默认密码 |
-| 5 | 是否需要数据保留期配置化 | 本期固定 5 年，配置化后续再做 |
+| 1 | `chat_messages.content` 是否启用 pg_trgm 全文索引 | 已确定：本期不启用，ILIKE 即可；数据量大时启用 |
+| 2 | 归档后缩略图是否也归档 | 已确定：缩略图保持热存 |
+| 3 | 备份是否复制到远端对象存储 | 已确定：先本地备份卷，远端可选 |
+| 4 | 初始超管账号的创建方式 | 已确定：部署脚本初始化，禁止弱默认密码 |
+| 5 | 是否需要数据保留期配置化 | 已确定：固定 5 年，配置化后续再做 |

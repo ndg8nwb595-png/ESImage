@@ -34,7 +34,7 @@
 | P0-7 参数/上传图恢复 | 已完成（待评审） | localStorage 保存参数与上传图 ID；新增 `GET /uploads/{id}`；上传图首次生成回填 session_id |
 | P0-8 首条会话创建 | 已完成（待评审） | 新增 `POST /sessions/messages`；聊天/生成无 session_id 时后端事务内创建 |
 | 重新生成 Agent 配置 | 已完成 | 按技能模板重写 docs/agents；五个标签已校验；docs/reviews 已忽略 |
-| 逐份细化子 PRD（grill-with-docs） | 进行中 | 按 1→11 号逐份访谈；1~5 号已完成并回写；6-管理后台-账号与权限进行中 |
+| 逐份细化子 PRD（grill-with-docs） | 已完成 | 1~11 号全部细化并回写（含 0 号同步）；遗留：§9.5 口径待复核、demo 文档一致性核对待定 |
 | 术语表独立 | 已完成 | 根目录 `GLOSSARY.md`；`AGENTS.md` 的「Domain glossary」同步路径与内容 |
 
 ### 12 份文档清单

@@ -42,7 +42,9 @@
 - **接口**：`/api/v1`、JWT Bearer、统一 `{code,message,data}`、分页 `{items,total,page,page_size}`、OpenAPI。
 - **登录与鉴权（2026-10-31 细化）**：密码 8~32 位无复杂度；JWT（PyJWT/HS256）载荷含 `sub`/`exp`/`iat`/`token_version`/`roles`/`permissions`，其中 roles/permissions 仅前端显示用，后端鉴权每请求查 Redis 缓存（≤30s、变更主动失效），以服务端为准；token 存 localStorage；无 refresh token（24h/7d 硬过期）；bcrypt cost=12；前端 react-router v6 + zustand + 自封装 fetch；内网 HTTP 预留 443；登录失败锁定不做。
 - **工作台与上传（2026-10-31 细化）**：商品图排序仅前端维护，生成时按 `upload_ids` 顺序写回 `sort_order`；后端数量校验=该用户「未绑定会话且 `active`」上传 ≤5；孤儿上传每日 04:00 清理（30 天未绑定且未被引用 → `deleted` + 删 MinIO 对象）；参数 localStorage 按会话存 `esimage_workspace_params_{session_id}`；模板应用时覆盖风格文本、取消模板保留不回滚。
-- **会话与生图链路（2026-10-31 细化）**：首条消息建会话 Redis 幂等键 TTL 60s；`requirement_changed` 由后端判定并在 done 事件返回；assistant 消息 agent_code 记最后输出者；截断摘要不落库；修复后复检一次质量审核；示例批次产出全部 6 张计划与文案、全套批次全量复用（仅剩生图→审核→规范→合成）；重生成/重试单张完全沿用原提示词、不新建批次，成功后 completed_count+1、可 partially_failed→completed。
+- **会话与生图链路（2026-10-31 细化）**：首条消息建会话 Redis 幂等键 TTL 60s；`requirement_changed` 由后端判定并在 done 事件返回；assistant 消息 agent_code 记最后输出者；截断摘要不落库；修复后复检一次质量审核；示例批次产出全部 6 张计划与文案、全套批次全量复用（仅剩生图→审核→规范→合成）；重生成/重试单张完全沿用原提示词、不新建批次，成功后 completed_count+1（仅替换失败图时，重生成成功张不变）、可 partially_failed→completed。
+- **接口与后端（2026-10-31 细化）**：SQLAlchemy 2.0 同步会话（FastAPI 线程池 + Celery 共用）；缩略图预签名 URL ≤5 分钟、原件鉴权流式；403 统一清 token 跳登录（20004/20005 不区分，/403 页保留不用）；批次 images 只返回当前有效（superseded 不返回）；input_full/output_full 存储前脱敏；pg_trgm 本期不启用；生成图缩略图 Worker 生成时同步生成；头像本期不做（字段/前缀预留）；retry_count=HTTP 瞬态重试、10 次指数退避为业务层；concurrency=豆包侧并发、WORKER_CONCURRENCY=worker 并发。
+- **部署运维（2026-10-31 细化）**：应用侧 TimedRotatingFileHandler 按天轮转 90 天压缩；备份宿主机 cron（02:00/02:30）；仓库交付 .env.example；日志 JSON 结构化。
 - **文档**：12 份 PRD 存于 `docs/prd/`，命名 `数字-中文名prd.md`；例外：1 号 PRD 及其实现文档已移入 `docs/prd/1-登录界面/`（2026-10-31 用户确认）；新增后台模块按业务域并入现有文档。
 - **术语表**：仓库根目录 `GLOSSARY.md` 是唯一来源；`AGENTS.md` 的「Domain glossary」小节是同步镜像。新增或修改术语时，先改 `GLOSSARY.md`，再同步 `AGENTS.md`。
 - **本地评审记录**：`docs/reviews/` 已加入 `.gitignore`，不进入仓库与 `main`。

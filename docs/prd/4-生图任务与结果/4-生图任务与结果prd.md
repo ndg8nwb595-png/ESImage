@@ -8,7 +8,7 @@
 | 编写日期 | 2026-10-31 |
 | 文档状态 | 待评审 |
 | 上游文档 | `0-系统汇总prd.md` |
-| 关联文档 | `../2-用户端创作工作台/2-用户端创作工作台prd.md`、`../3-Agent会话交互/3-Agent会话交互prd.md`、`../7-管理后台-用户与生图记录prd.md` |
+| 关联文档 | `../2-用户端创作工作台/2-用户端创作工作台prd.md`、`../3-Agent会话交互/3-Agent会话交互prd.md`、`../7-管理后台-用户与生图记录/7-管理后台-用户与生图记录prd.md` |
 | 术语依据 | `GLOSSARY.md` |
 
 ---
@@ -514,7 +514,7 @@ pending → generating → success / failed
 
 ### 8.1 Agent 失败
 
-1. 除生图执行 Agent 外，每个 Agent 调用失败自动重试 **10 次**，采用指数退避（1s → 2s → 4s → 8s → 16s → 30s 封顶）。
+1. 除生图执行 Agent 外，每个 Agent 调用失败自动重试 **10 次**，采用指数退避（1s → 2s → 4s → 8s → 16s → 30s 封顶）。此为业务层重试；HTTP 瞬态重试次数由模型配置 `retry_count` 控制（连接失败/429/5xx 立即重试），两层叠加。
 2. 生图执行 Agent 每张最多尝试 **2 次**；2 次均失败，整个任务立即失败。
 3. 其他 Agent 重试 10 次仍失败：
    - 核心 Agent（规划、商品理解、文案、提示词）：批次失败，记录失败阶段与错误信息，前端提示卡点。
@@ -603,7 +603,7 @@ pending → generating → success / failed
   - `index` 不变；
   - `attempt_no` 加 1；
   - 旧图不再在结果区展示，但保留在后台。
-- 重生成不改变批次总数；成功后 `completed_count` 加 1，全部图片成功时批次状态由 `partially_failed` 置为 `completed`。
+- 重生成不改变批次总数；`completed_count` 仅在替换**失败图**成功时加 1（重生成成功张时 `completed_count` 不变），全部图片成功时批次状态由 `partially_failed` 置为 `completed`。
 
 ---
 

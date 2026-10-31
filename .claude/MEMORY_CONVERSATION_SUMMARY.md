@@ -65,7 +65,8 @@
 - 第 8 轮完成（8-管理后台-聊天记录）：必需变量按 §8.5 建议清单警告（允许保存）；retry_count=HTTP 瞬态重试、4 号 10 次为业务层（两层叠加，4 号同步）；会话详情滚动加载；concurrency=豆包侧并发上限、WORKER_CONCURRENCY=worker 并发（11 号同步）；5 项待确认项解决。
 - 第 9 轮完成（9-后端服务与接口）：SQLAlchemy 2.0 同步会话（API 线程池 + Celery 共用）；缩略图走预签名 URL ≤5 分钟、原件走后端流式（用户选择，改写 §8.3）；403 统一清 token 跳登录（用户选择，同步 1 号 §5.2/§5.3/§5.4 与 6 号 §3.4）；批次 images 列表只返回当前有效图（superseded 不返回）；4 项待确认项解决。
 - 第 10 轮完成（10-数据模型与存储）：input_full/output_full 存储前脱敏；pg_trgm 本期不启用；生成图缩略图由 Worker 在生图成功后同步生成；头像本期不做（用户选择，同步 0 号 §5.4、9 号 §5.7、10 号 avatar_path/avatars 前缀标注预留）；5 项待确认项解决。
-- 下一轮：11-部署与运维。
+- 第 11 轮完成（11-部署与运维）：应用侧 TimedRotatingFileHandler 轮转（90 天压缩）；备份宿主机 cron 执行；仓库交付 .env.example；日志 JSON 结构化；6 项待确认项解决。
+- **11 份子 PRD 全部细化完成**（1~11 号均已回写，涉及 0 号技术栈/头像等同步）。遗留待确认：4 号 §9.5 completed_count 口径修正（依 demo README §6.4 修改，待用户复核）；各模块 demo 文档（README/issues/接口文档）与已细化 PRD 的一致性核对尚未进行（demo README §6 有 12 条待统一项，如 GET /templates 权限 demo=user.generate 与 PRD 9 §5.1=user.workspace 不一致）。
 - **重大结构变化（并行发生）**：`docs/prd/` 被重组为每模块目录（`N-模块名/` 内含 PRD md、README（最小实现 demo 范围）、`issues/`（垂直切片工单）、`接口文档-xxx最小demo.md`）；1~6 号已迁移，0/7~11 号仍在根目录为 .md。之前回写的修改均随文件搬移保留；仅 4 号「重试分层」一处编辑因搬移丢失，已在新路径 `4-生图任务与结果/4-生图任务与结果prd.md` 补回。
 - 依据 4 号 demo README §6.4 提示，修正 PRD 4 §9.5：`completed_count` 仅在替换失败图成功时 +1，重生成成功张不变（避免超 total_count）——已改，待用户确认。
 
