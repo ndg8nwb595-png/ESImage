@@ -435,4 +435,11 @@
 
 - `find docs/prd/6-管理后台-账号与权限 -type f` 确认 11 个文件（PRD + README + 接口文档 + 8 tickets）齐全。
 - `grep -rnP "(^|[^/])6-管理后台-账号与权限prd\.md" docs` 只剩文件夹内 README/接口文档的相对文件名引用，外部无旧路径。
-- 未运行代码或测试，未 commit，未创建 GitHub issue（tickets 为本地文件）。
+- 未运行代码或测试，未创建 GitHub issue（tickets 为本地文件）。
+
+### 提交记录（2026-10-31）
+
+- 提交 `7d34003 docs: 拆解管理后台账号与权限最小 demo 任务与接口`：新增 README、`issues/01~08`、接口文档共 10 个文件。
+- 会话期间其他并行会话已提交 33890f1、1202e82，6 号引用路径与五个记忆文档的会话 10 记录已被这两次提交一并带入 HEAD；本次提交不再重复包含。
+- `git push origin main` 失败两次：`Failed to connect to github.com port 443`（约 21 秒超时）；排查结果：无 http/https 代理、本机常见代理端口（7890/7897/10809/1080/8888/8080）均不可用、`~/.ssh` 无私钥，GitHub 443 不通。本地 `main` 领先 `origin/main` 3 个提交，待网络恢复后执行 `git push origin main`。
+- 提交范围刻意排除了工作区中其他会话未提交的改动（1/4/6/7/8/9/11 号 PRD 的评审内容与 403 口径、三个记忆文档的后续条目）。
