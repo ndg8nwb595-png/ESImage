@@ -350,3 +350,19 @@
 | 独立审查修复 | 完成 | 本地 FileResponse 兼容、async 上传线程池、compose 存储配置、脚本本地隔离、StorageError 全局映射、端口绑定、响应关闭测试 |
 | MinIO Range/ETag | 已知取舍 | MinIO 后端使用缓冲 Response，不支持 Range；本地后端保持原 FileResponse 行为 |
 | 归档超时连接池 | 待后续 | MinIO SDK 默认超时/重试较长；极端卡顿可能占用连接池，后续可配置短超时 PoolManager |
+## 2026-10-31 会话 17：8 号管理后台-聊天记录（后端）
+
+| 需求 | 状态 | 实现手段 |
+| --- | --- | --- |
+| 分支与模块目录 | 完成 | `feat/admin-chat-records-backend-demo`；新建 `modules/admin/chat_records/`，骨架提交 `1624922` 并推送分支与 `main` |
+| 聊天会话列表 | 完成 | `GET /admin/chat/sessions`：用户/标题关键词（ILIKE 转义）、最后消息日期范围、状态、20/50/100 分页；管理员排除超管账号；聚合消息数、Token、批次数 |
+| 会话详情与消息窗口 | 完成 | `GET /admin/chat/sessions/{id}`：默认最新、`before_id`、`around_id` 锚点；`has_older/has_newer`；Agent 名称、调用摘要、关联批次；`sending` 超时惰性标记 failed |
+| Agent 调用明细 | 完成 | `GET /admin/agent-runs/{id}`：完整字段、`token_usage`、`full_available`；管理员 `full=true` 403；超管可看已脱敏完整输入/输出；权限经 session/batch 推导 |
+| 消息搜索 | 完成 | `GET /admin/chat/messages/search`：`keyword` 1~100、固定每页 20、大小写不敏感、通配符转义、约 120 字符纯文本摘要、可见范围过滤 |
+| 模型配置 | 完成 | `GET/PUT /admin/model-config`：仅超管；AES-256-GCM 加密、`sk-****abcd` 脱敏、范围/步长/URL 校验、单启用行、审计不含明文 |
+| 系统提示词 | 完成 | 8 Agent 固定顺序列表、详情、保存新版本、回滚生成新版本；`{{变量}}` 识别、未知/缺失建议变量告警；行锁；审计 |
+| 加密密钥启动校验 | 完成 | `MODEL_CONFIG_ENCRYPTION_KEY` 为主、`ENCRYPTION_KEY` 回退；缺失或非 32 字节启动失败；`.env.example` 与测试 conftest 提供演示密钥 |
+| 演示种子 | 完成 | `chat_records/seed.py` 4 会话/消息/调用/批次幂等夹具；auth 种子新增 `demo_super`；config 种子补版本 1 与默认模型配置 |
+| 自动化测试 | 完成 | `tests/test_admin_chat_records.py` 7 用例通过；合并后全量 178 collected / 176 passed，2 个 `test_ops` 既有环境失败 |
+| curl 验收 | 完成 | `.smoke/curl_module8.sh` 覆盖 8 组接口，合并前后均全部通过 |
+| 既有缺陷修复 | 完成 | `admin/router.py` 显式导入子模块 `APIRouter`；管理后台路由补 `/admin` 前缀 |

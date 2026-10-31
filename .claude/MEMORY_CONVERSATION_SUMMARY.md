@@ -265,6 +265,21 @@
 - 收尾：提交 `6e0c96c`；rebase 到最新 `origin/main` `4ea5d64`（解决五个记忆文档冲突），全量 `pytest` **85 passed**；推送功能分支并 `--ff-only` 合并 `main`，远程 `main` 已更新；`.smoke/` 已删除并加入 `.gitignore`。
 - 未做：生图模块（4 号，模型 `doubao-seedream-5-0-pro-260628`）；管理端聊天记录查询（8 号）。
 
+## 2026-10-31 会话 17：8 号管理后台-聊天记录后端实现
+
+- 用户要求连 chrome-devtools MCP、新建分支与模块目录、只做后端、每个接口用 curl 验证；同机有其他 agent 并行开发，优先复用挂起的 docker（`esimage-postgres`，55433）。
+- 新建分支 `feat/admin-chat-records-backend-demo` 与目录 `backend/app/modules/admin/chat_records/`；骨架提交 `1624922` 并推送分支，随后合并当时最新 `origin/main`（数据模型/历史/运维模块）后推送 `main`（`8dc7952`）。
+- 经用户确认两项架构决策：① 聊天记录接口迁入新目录 `chat_records/`，模型配置/提示词仍留在 `admin/prompts/`；② `MODEL_CONFIG_ENCRYPTION_KEY` 严格按文档在启动时校验，缺失/非 32 字节直接启动失败。
+- 按 `接口文档-聊天记录最小demo.md` 重写/补齐：会话列表筛选与聚合、会话详情游标与 `around_id`、Agent 调用明细与 `full=true`、消息搜索与摘要、AES-256-GCM 模型配置、8 Agent 提示词版本/回滚/变量告警、审计。
+- 发现并修复两个既有启动级问题：`admin/router.py` 导入的是子模块而非 `APIRouter`；管理后台路由缺少 `/admin` 前缀（所有接口实际注册成了 `/api/v1/chat/*`）。修复后 36 个 admin 路由与文档一致。
+- 新增测试 `tests/test_admin_chat_records.py`（7 用例）全部通过；全量 `pytest` 142 用例中 139 通过，3 个 `test_ops.py` 失败是环境缺少 celery 的既有问题。
+- curl 冒烟 `.smoke/curl_module8.sh` 覆盖 8 组接口全部通过（登录、列表、详情、Agent 明细、搜索、模型配置、提示词、审计、普通用户 403）。
+- 环境遗留：共享 `esimage` 库已存在同名「秋季通勤衬衫」旧测试会话，种子按 `(user_id,title)` 幂等跳过；标准 12 消息夹具在测试库中完整验证。尝试重命名旧会话被权限策略拒绝，未强改共享数据。
+- 补充确认：8 号 `MODEL_CONFIG_ENCRYPTION_KEY` 与 11 号 `ENCRYPTION_KEY` 采用双名兼容（优先新名，回退旧名，均缺失才启动失败）。
+- 独立审查结论「无阻断问题」；修复 4 条非阻断项：`around_id` 按实际更早条数补齐、`status=""` 等价 all、版本 1 仅在 current<=1 时补写并记 demo_super、捕获 AES-GCM `InvalidTag`。修复后测试与 curl 均通过。
+- 合并最新 `main` 时发现并行 agent 已在 `content/chat_router.py` 放旧聊天实现并与 `chat_records` 同时挂载；用户确认「只挂载新实现」：旧文件保留但不注册，README 标注 legacy。`admin/router.py` 采用 main 的混合前缀方案（dashboard/tokens/content 自带 `/admin`，其余挂载时加）。
+- 合并后测试污染修复：8 号夹具从全局 conftest 移到本模块级 fixture 并在 teardown 清理；auth 种子去重 `demo_super`。因并行 agent 会 `drop_all` 默认测试库，最终用 `TEST_DB_NAME=esimage_admin_chat8_test` 跑全量：178 collected / 176 passed，仅 2 个既有 `test_ops` 失败；合并后 curl 冒烟再次全通过。
+- 提交 `c8c0843`、合并提交 `0172d4b`；推送分支并快进 `main`。
 ## 2026-10-31 会话 17：管理后台-账号与权限后端实现与 curl 验收
 
 - 用户要求：连接 chrome-devtools MCP；在合适位置建模块文件夹；新建分支；先推送分支并快进合并 `main`；只做后端；每个接口用 curl 验证；复用同设备其他 agent 的 docker 进程。

@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import os
 from datetime import timedelta, timezone
 from pathlib import Path
@@ -99,9 +101,35 @@ class Settings:
         # 健康检查单项超时（秒）；三项并发，整体不超 5 秒
         self.HEALTH_CHECK_TIMEOUT: float = float(os.getenv("HEALTH_CHECK_TIMEOUT", "2"))
 
+        # 模型配置 API Key 的 AES-256-GCM 密钥：base64 编码的 32 字节
+        # 8 号接口文档使用 MODEL_CONFIG_ENCRYPTION_KEY；
+        # 11 号部署模板使用 ENCRYPTION_KEY，二者含义相同，优先前者、兼容后者。
+        # 缺失或长度不符时应用启动失败，避免写入不可解密的数据。
+        self.MODEL_CONFIG_ENCRYPTION_KEY: str = (
+            os.getenv("MODEL_CONFIG_ENCRYPTION_KEY", "").strip()
+            or os.getenv("ENCRYPTION_KEY", "").strip()
+        )
+
         if not self.JWT_SECRET:
             raise RuntimeError(
                 "缺少 JWT_SECRET 环境变量。请复制 backend/.env.example 为 backend/.env 并设置随机密钥。"
+            )
+
+        if not self.MODEL_CONFIG_ENCRYPTION_KEY:
+            raise RuntimeError(
+                "缺少 MODEL_CONFIG_ENCRYPTION_KEY（或 ENCRYPTION_KEY）环境变量。"
+                "请设置 base64 编码的 32 字节密钥（例如 "
+                "python -c \"import base64,os;print(base64.b64encode(os.urandom(32)).decode())\"）。"
+            )
+        try:
+            key_bytes = base64.b64decode(self.MODEL_CONFIG_ENCRYPTION_KEY, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise RuntimeError(
+                "MODEL_CONFIG_ENCRYPTION_KEY 不是合法的 base64；需为 base64 编码的 32 字节密钥。"
+            ) from exc
+        if len(key_bytes) != 32:
+            raise RuntimeError(
+                f"MODEL_CONFIG_ENCRYPTION_KEY 解码后为 {len(key_bytes)} 字节，需为 32 字节。"
             )
 
 

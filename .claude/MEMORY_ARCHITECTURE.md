@@ -306,6 +306,18 @@
 - **实现状态**：业务代码提交 `6e0c96c`，rebase 到 `4ea5d64` 后推送 `feat/agent-chat-backend-demo` 并 `--ff-only` 合并 `main`；全量 `pytest` **85 passed**；真实豆包联调通过。
 - **已知 demo 边界**：参数校验先于幂等重放（已删除上传图的极端重试会返回 30006）；真实模型措辞需联调抽检；接口不返回 usage 时 Token 记 0。
 
+## 8 号管理后台-聊天记录（2026-10-31 用户确认）
+
+- **模块边界**：聊天记录独立到 `backend/app/modules/admin/chat_records/`；模型配置与系统提示词继续留在 `admin/prompts/`（均属「Agent 配置」）。聊天接口从 `admin/content/router.py` 迁出，URL 不变，7 号内容追溯不受影响。
+- **路由前缀（合并后最终口径）**：`admin/router.py` 使用 `APIRouter()`；`dashboard` / `tokens` / `content` 子路由自带 `/admin` 前缀；`accounts`、`assets`、`prompts`、`audit`、`chat_records` 在 `include_router` 时加 `prefix="/admin"`。禁止在汇总层再加 `prefix`，否则会出现 `/admin/admin`。导入必须显式写 `from app.modules.admin.xxx.router import router`。
+- **重复实现处理**：并行 agent 曾把旧聊天实现放在 `content/chat_router.py` 并与 `chat_records` 同时挂载；合并后只挂载 `chat_records`，旧文件保留但不注册，避免同一路径被先注册的旧实现覆盖。
+- **加密密钥**：`MODEL_CONFIG_ENCRYPTION_KEY` 为 base64 编码的 32 字节；与 11 号部署模板的 `ENCRYPTION_KEY` 双名兼容（优先前者、回退后者）；两者都缺失或长度不符时应用启动失败。测试与 `.env.example` 使用固定演示密钥；生产必须替换。
+- **模型配置**：AES-256-GCM，存储 `base64(12 字节 nonce + ciphertext + tag)`；只返回 `sk-****abcd` 脱敏值；省略/空 `api_key` 表示不修改；审计只记录 `changed_fields` 与 `api_key_changed`。
+- **聊天可见范围**：管理员在接口层排除拥有 `super_admin` 角色的账号；越权统一 403 `20005`（不用 `20006`）；聊天记录任何角色只读，不提供发送/编辑/删除/导出/恢复入口。
+- **游标与搜索**：消息窗口用 `id` 游标（默认 20、最大 50），`before_id` 与 `around_id` 互斥；`around_id` 取锚点前 `floor((limit-1)/2)` 条、后 `limit-1-已取` 条，不向另一侧扩张。搜索用 `ILIKE` + 通配符转义，固定每页 20，摘要约 120 字符纯文本。
+- **提示词版本**：保存 `current_version+1` 并设为当前；回滚复制目标版本内容再生成新版本，不删除历史；行锁 + 后保存者覆盖；变量语法 `{{变量名}}`，允许两侧空格，区分大小写。
+- **种子**：以 `(user_id, title)` 识别会话，已存在则跳过其子数据；8 Agent 种子补版本 1；默认模型配置 1 条；`demo_super` 为演示超管。
+- **环境复用**：复用 `esimage-postgres`（55433）；8000 被 DynamoDB Local 占用，本模块联调使用 8010。共享库存在同名旧会话时，种子按约定跳过，不覆盖他人数据。
 ## 管理后台-账号与权限后端实现约定（2026-10-31 用户确认）
 
 - **模块位置**：账号与角色放 `backend/app/modules/admin/accounts/`，操作日志放 `backend/app/modules/admin/audit/`；复用已有骨架，不新增顶层模块。

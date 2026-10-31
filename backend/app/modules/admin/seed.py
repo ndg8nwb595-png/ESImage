@@ -5,7 +5,8 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.config import SizePreset, SystemPrompt
+from app.models.config import ModelConfig, PromptVersion, SizePreset, SystemPrompt
+from app.models.user import User
 
 # (平台名称, 宽, 高, 排序)
 SIZE_PRESETS: list[tuple[str, int, int, int]] = [
@@ -30,6 +31,10 @@ AGENTS: list[tuple[str, str, str]] = [
 
 def seed_config(db: Session) -> None:
     """幂等写入尺寸预设与系统提示词。"""
+    # 版本 1 的修改人记为演示超管；账号不存在时允许为空
+    seed_user = db.scalar(select(User).where(User.username == "demo_super"))
+    seed_user_id = seed_user.id if seed_user is not None else None
+
     for platform_name, width, height, sort_order in SIZE_PRESETS:
         existing = db.scalar(
             select(SizePreset).where(
@@ -52,14 +57,62 @@ def seed_config(db: Session) -> None:
     for agent_code, name, content in AGENTS:
         existing = db.scalar(select(SystemPrompt).where(SystemPrompt.agent_code == agent_code))
         if existing is None:
-            db.add(
-                SystemPrompt(
-                    agent_code=agent_code,
-                    name=name,
-                    content=content,
-                    current_version=1,
-                )
+            existing = SystemPrompt(
+                agent_code=agent_code,
+                name=name,
+                content=content,
+                current_version=1,
             )
+            db.add(existing)
+            db.flush()
             print(f"[种子] 新增系统提示词 {agent_code}")
+
+        # 8 号要求每个 Agent 都有版本 1，缺失时补写，不覆盖已有内容。
+        # 仅当当前版本仍为 1 时才可安全认定当前内容就是初版；
+        # 若已被修改过且初版缺失，不伪造历史，交由人工处理。
+        version_one = db.scalar(
+            select(PromptVersion).where(
+                PromptVersion.prompt_id == existing.id,
+                PromptVersion.version == 1,
+            )
+        )
+        if version_one is None:
+            if existing.current_version <= 1:
+                db.add(
+                    PromptVersion(
+                        prompt_id=existing.id,
+                        agent_code=agent_code,
+                        version=1,
+                        content=existing.content,
+                        created_by=seed_user_id,
+                    )
+                )
+                print(f"[种子] 新增系统提示词版本 {agent_code} v1")
+            else:
+                print(
+                    f"[种子] 警告：{agent_code} 当前版本 {existing.current_version} "
+                    "缺少版本 1，跳过补写以避免伪造历史"
+                )
+
+    # 8 号模型配置：没有启用行时插入演示默认值
+    active_config = db.scalar(select(ModelConfig).where(ModelConfig.is_active.is_(True)))
+    if active_config is None:
+        db.add(
+            ModelConfig(
+                provider="volcengine_ark",
+                base_url="https://ark.cn-beijing.volces.com/api/v3",
+                api_key_ciphertext=None,
+                text_model="doubao-seed-character-demo",
+                image_model="doubao-seedream-demo",
+                vision_model=None,
+                temperature=0.7,
+                timeout_seconds=120,
+                concurrency=4,
+                retry_count=1,
+                max_context_tokens=32000,
+                is_active=True,
+            )
+        )
+        print("[种子] 新增模型配置（演示默认值）")
 
     db.commit()

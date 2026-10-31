@@ -11,7 +11,8 @@ admin/
 ├── seed.py            # 配置域种子：尺寸预设与 8 个系统提示词
 ├── seed_content.py    # 7 号幂等内容种子：用户、会话、批次、图片、Agent 调用
 ├── dashboard/         # 概览四卡（60 秒进程内缓存）与 Token 统计
-├── content/           # 7 号内容追溯与媒体；8 号聊天记录拆在 chat_router.py
+├── chat_records/      # 8 号聊天记录：会话列表/详情/搜索/Agent 调用明细
+├── content/           # 7 号内容追溯与媒体；chat_router.py 为旧聊天实现，保留但未挂载
 └── accounts/          # 6 号账号与权限 CRUD；stats 使用真实批量聚合
 ```
 
@@ -52,7 +53,9 @@ admin/
 - 6 号账号 CRUD 保留在 `accounts/router.py`；列表统计改为 `accounts/service.py`
   的批量聚合，`failed_task_count` 计入 `failed` 与 `partially_failed`，Token 口径与
   7 号 Token 统计一致。
-- 8 号聊天记录接口拆到 `content/chat_router.py`，路径仍为
-  `/api/v1/admin/chat/*` 与 `/api/v1/admin/agent-runs/{run_id}`，避免与 7 号内容路由冲突。
-- `accounts`、`assets`、`prompts`、`audit`、`chat` 子路由统一挂载到 `/api/v1/admin`；
+- 8 号聊天记录统一由 `chat_records/` 提供，路径为
+  `/api/v1/admin/chat/*` 与 `/api/v1/admin/agent-runs/{run_id}`。
+- `content/chat_router.py` 为并行分支留下的旧实现，保留文件但**不挂载**，
+  避免与 `chat_records/` 产生重复路径；后续可删除。
+- `accounts`、`assets`、`prompts`、`audit`、`chat_records` 子路由统一挂载到 `/api/v1/admin`；
   `dashboard`、`tokens`、`content` 自带 `/admin/...` 前缀。

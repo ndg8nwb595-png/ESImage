@@ -25,6 +25,11 @@ ADMIN_DATABASE_URL = (
 
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ.setdefault("JWT_SECRET", "test-only-secret-esimage-0123456789abcdef")
+# 8 号模型配置加密：测试使用固定的 base64 32 字节密钥
+os.environ.setdefault(
+    "MODEL_CONFIG_ENCRYPTION_KEY",
+    "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
+)
 # 测试默认使用确定性演示桩，避免读取开发者 .env 中的 ARK_API_KEY 产生真实调用
 os.environ.setdefault("CHAT_USE_STUB", "1")
 # 测试时不等待演示管线阶段停顿，并把本地存储放到独立的测试目录

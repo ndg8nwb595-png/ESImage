@@ -10,7 +10,6 @@ from app.modules.admin.accounts.router import router as accounts_router
 from app.modules.admin.assets.router import router as assets_router
 from app.modules.admin.audit.router import router as audit_router
 from app.modules.admin.chat_records.router import router as chat_records_router
-from app.modules.admin.content.chat_router import router as chat_content_router
 from app.modules.admin.content.router import router as content_router
 from app.modules.admin.dashboard.router import router as dashboard_router
 from app.modules.admin.dashboard.tokens import router as tokens_router
@@ -23,9 +22,7 @@ router.include_router(dashboard_router)
 router.include_router(tokens_router)
 router.include_router(content_router)
 router.include_router(accounts_router, prefix="/admin")
-# 8 号聊天记录：当前实现位于 content/chat_router.py；
-# chat_records 为并行 agent 的骨架模块，保留挂载以便后续接管。
-router.include_router(chat_content_router, prefix="/admin")
+# 8 号聊天记录：统一由 modules/admin/chat_records 提供
 router.include_router(chat_records_router, prefix="/admin")
 router.include_router(assets_router, prefix="/admin")
 router.include_router(prompts_router, prefix="/admin")

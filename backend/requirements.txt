@@ -8,6 +8,8 @@ python-dotenv>=1.0,<2.0
 python-multipart>=0.0.9,<1.0
 Pillow>=10.0,<13.0
 openai>=1.0,<4.0
+# 8 号模型配置：API Key 使用 AES-256-GCM 对称加密
+cryptography>=42,<50
 pytest>=8.3,<10.0
 httpx>=0.27,<1.0
 # 11 号部署与运维：Celery 队列基线、Redis 缓存、MinIO 对象存储、Alembic 迁移
