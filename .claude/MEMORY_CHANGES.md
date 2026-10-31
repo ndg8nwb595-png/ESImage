@@ -998,6 +998,7 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 - **最终验证**：使用独立测试库 `TEST_DB_NAME=esimage_admin_chat8_test` 跑全量，**178 collected / 176 passed / 2 failed**；仅 `test_ops.py` 的 httpx2 中文头与 `delay_ms` 为既有环境失败。默认的 `esimage_admin7_test` 与并行 agent 冲突（对方 `drop_all` 造成死锁），验证时必须用独立库。
 - 合并后重新启动服务（8013）跑 curl 冒烟，8 组接口全部通过；已停止临时服务。
 - 提交 `c8c0843`（8 号实现）与 `0172d4b`（合并最新 main）；推送 `feat/admin-chat-records-backend-demo` 并快进 `main`。
+- chrome-devtools MCP 已连接并打开 `http://127.0.0.1:8013/api/docs`；通过页面内 `fetch('/api/openapi.json')` 确认 8 个模块 8 路径全部注册，Swagger 标题正常。
 ## 2026-10-31 会话 17：管理后台-账号与权限后端实现
 
 ### 基线问题修复
