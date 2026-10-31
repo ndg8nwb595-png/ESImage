@@ -1321,3 +1321,9 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 - `backend/app/modules/admin/assets/router.py`：移除 `prefix="/admin"`，避免与 `admin/router.py` 的 `/admin` 前缀叠加成 `/api/v1/admin/admin/...`。
 - `backend/README.md` / `backend/app/modules/contract/openapi.py`：合并最新 main 的管理端内容追溯/账号路由与 4 号用户只读配置映射。
 - 验证：`TEST_DB_NAME=esimage_generation_test python -m pytest` **191 passed**；替身 curl 全接口通过；真实全套批次 48 在系统终止前 completed 6/6，单张/ZIP 200。
+
+### 会话 17 收尾：等待 MinIO
+
+- 未修改 generation 存储代码；按用户选择等待 `feat/minio-storage-local` 合并后再适配。
+- 重建本地库 `esimage_generation` / `esimage_generation_test` 并执行建表/种子；真实批次 48 数据随共享容器重建丢失。
+- 清理临时验收文件（`_regen_probe.py`、登录/服务探针日志）。

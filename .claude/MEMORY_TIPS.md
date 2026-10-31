@@ -246,3 +246,6 @@
 - **管理端前缀只在一处加**：主分支 `admin/router.py` 已给子路由统一加 `/admin`；子路由自己再加会出现 `/admin/admin/...`，表现为 404。
 - **重试期间批次状态可能仍是 completed**：验收脚本不能只轮询批次状态，必须按 `image_id` 轮询新图直到 success/failed，否则会过早下载拿到 409。
 - **长时间真实 curl 验收注意内存**：本次系统在验收后被内存压力终止了后台命令；代码与批次数据不受影响，但本地 `generating` 残留需手动收敛。
+- **并行 agent 重建共享容器会清掉模块库**：本次 `esimage-postgres` 重建后 `esimage_generation` 消失，登录 500；先查 `pg_database` 再排查代码。
+- **共享容器上的 MinIO 端口不是默认 9000/9001**：本项目用 9002（API）/9003（控制台），因为 9000/9001 被其他项目占用。
+- **存储迁移期间不要在分支上抢先改适配层**：等对方的 `feat/minio-storage-local` 合并后 rebase，再统一切到 `get_storage()`，避免两套实现冲突。

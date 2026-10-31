@@ -376,3 +376,11 @@
 - 全量 pytest **191 passed**；替身 curl 全部接口通过；重生成验收脚本改为轮询新图状态（批次在重试期间可能仍为 completed），已验证。
 - 真实验收：全套批次 48 在被系统因内存不足终止前已达到 **completed 6/6**，单张下载与整组 ZIP 均 200；随后重生成请求创建了新图 199，但 8011 服务进程被系统终止，新图停在 generating。已把本地残留记录收敛为合法终态（partial 5/6），这不是代码缺陷。
 - 真实示例图（优化后）人工检查通过：中文标题/卖点、留白与商品主体正常。
+
+### 会话 17 收尾：等待 MinIO 存储迁移
+
+- 并行 agent 在 `E:/万幸科技/ESImage/main/ESImage` 的 `feat/minio-storage-local` 分支上把存储切到 Docker MinIO：`esimage-minio` 容器跑在宿主 9002/9003，`.env.example` 使用 `STORAGE_BACKEND=minio`、`MINIO_ENDPOINT=127.0.0.1:9002`、`MINIO_BUCKET=esimage`。
+- 共享 `esimage-postgres` 容器被重建，`esimage_generation` 库丢失；已重建 `esimage_generation` / `esimage_generation_test` 并重新执行建表/种子，但真实批次 48 的数据丢失。
+- 用户选择：**等 MinIO 分支合并后再适配**；4 号 generation 暂保持本地 `core/storage` / `workspace.storage`，不合并 main、不提前改存储。
+- 待办：MinIO 分支合入 main 后，rebase 本分支，把 generation 的保存/读取切到共享 `app.modules.data.storage.get_storage()`；再补真实重生成验收与合并 main。
+- 已推送分支：`feat/generation-backend-demo` @ `ad1f513`；main 最新为 3878e33（8 号聊天记录），尚未包含 MinIO 迁移。

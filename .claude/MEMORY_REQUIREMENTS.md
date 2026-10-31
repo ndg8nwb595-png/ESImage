@@ -457,3 +457,12 @@
 | 替身 curl | 完成 | 全部接口通过 |
 | 真实全套 6/6 | 完成 | 批次 48 在被系统终止前 completed 6/6；单张/ZIP 200 |
 | 真实重生成完成 | 未完成（外部） | 服务进程被系统因内存不足终止，新图停在 generating；已收敛为 partial |
+
+### 会话 17 新增待办：MinIO 存储
+
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| 并行 MinIO 迁移 | 进行中（其他 agent） | `feat/minio-storage-local`，容器 9002/9003，`STORAGE_BACKEND=minio` |
+| 4 号 generation 存储适配 | 待办 | 等该分支合并后 rebase，改用共享 `get_storage()` |
+| 合并 main | 暂缓 | 用户选择等 MinIO 分支合并后再处理 |
+| 真实重生成验收 | 暂缓 | 共享库重建导致批次 48 丢失；待存储稳定后重跑 |

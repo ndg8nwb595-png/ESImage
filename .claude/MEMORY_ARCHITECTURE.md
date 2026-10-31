@@ -419,3 +419,9 @@
 - 管理端子路由统一由 `app/modules/admin/router.py` 加 `/admin` 前缀；`admin/assets/router.py` 只定义 `/templates|/materials|/sizes`，不要再自带 `/admin`，否则会变成 `/api/v1/admin/admin/...`。
 - 用户端只读配置仍为 `/api/v1/templates|/sizes|/templates/{id}/thumbnail`，由 generation `config_router` 提供；两条路径互不冲突。
 - 真实全套批次在被系统终止前已完成 6/6；重生成完成验证受外部内存终止影响，不是代码缺陷，已把本地残留状态收敛为合法终态。
+
+### 会话 17 补充：存储迁移等待
+
+- 共享存储将由并行 agent 统一改为 Docker MinIO（`STORAGE_BACKEND=minio`，宿主 9002）。
+- 4 号 generation 的存储落点最终应改为 `app.modules.data.storage.get_storage()`，不再直接使用 `app.core.storage` / `workspace.storage`；在对方分支合并前不改，避免冲突。
+- 数据库与对象存储都是并行 agent 共享的本地基础设施；容器重建会丢失模块库，验收前需重新建库/种子。
