@@ -1162,3 +1162,12 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 - 已在 `feat/minio-storage-local` 提交：提交信息 `feat: 接入 MinIO 统一存储门面`（amend 后具体 hash 以 `git log` 为准）。
 - 未 push/merge，等待用户确认。
 - Postgres 卷切换事故仍待用户裁决（见第三节）。
+
+### 七、合并最新 main 与 Postgres 恢复（2026-11-01）
+
+- 合并 `origin/main`（`3878e33`，含 8 号聊天记录实现）到 `feat/minio-storage-local`。
+- 冲突：`.claude/MEMORY_REQUIREMENTS.md` 与 `backend/.env.example`，均保留双方内容；`backend/.env.example` 同时保留 MinIO 配置与 `MODEL_CONFIG_ENCRYPTION_KEY`。
+- 上游新增 `MODEL_CONFIG_ENCRYPTION_KEY` 启动校验；已在本地 `backend/.env` 追加随机 32 字节 base64 密钥（未显示值、未提交）。
+- 合并后全量 `pytest`：仍仅 2 个既有 `test_ops` 失败。
+- 用户选择 Postgres 恢复方案 C：停止 `esimage-postgres`，清空新卷 `esimage_pgdata`，用临时容器把旧卷 `esimage_esimage_pgdata` 完整复制到新卷，再启动容器。
+- 恢复验证：容器 healthy；`esimage` 库 public schema **18 张表、4 个用户**；旧卷保留未删除。

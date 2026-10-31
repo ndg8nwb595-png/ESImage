@@ -207,3 +207,5 @@
 - **本地冒烟脚本要固定存储后端**：`STORAGE_ROOT` 只对 local 生效；开发者 `.env` 改成 minio 后，脚本必须显式 `STORAGE_BACKEND=local`。
 - **全局异常处理器按 MRO 匹配**：同时注册 `ObjectNotFound` 与 `StorageError` 时，子类会命中更具体的处理器；不要在通用 `Exception` 里再判断类型。
 - **本地开发端口默认绑定 `127.0.0.1`**：`0.0.0.0` 会把无密码 Redis / 默认口令 MinIO 暴露到局域网。
+- **合并 main 后要重新检查启动必填项**：上游新增 `MODEL_CONFIG_ENCRYPTION_KEY` 后，旧 `.env` 会让应用启动失败；合并后先用 `python -c "import app.main"` 做启动冒烟，再补本地 `.env`。
+- **Docker 卷恢复优先“复制”而不是“改挂载”**：停止容器后把旧卷内容 `cp -a` 到当前卷，既能恢复旧数据又保留 compose 现有卷名；旧卷不要删除，作为回滚备份。

@@ -304,4 +304,7 @@
 - 验证：新增 13 个存储单元测试 + 2 个真实 MinIO 集成测试（opt-in）全部通过；真实 MinIO 完成上传→读取→缩略图→health 端到端；全量 pytest 仅 2 个既有 `test_ops` 失败。
 - 事故/待用户裁决：`docker compose up` 因卷键名差异重建了 `esimage-postgres`，新容器挂载新的空卷 `esimage_pgdata`；旧数据仍完整保存在 `esimage_esimage_pgdata` 卷中，未删除。恢复旧容器的 `docker rm -f` 被自动权限策略拒绝，需用户确认如何处理。
 - 审查：独立只读审查代理完成，提出 8 项；已修复本地 FileResponse 兼容、async 上传阻塞、compose 存储配置、脚本本地后端隔离、StorageError 全局映射、MinIO 端口绑定，并补响应关闭测试；MinIO 的 Range/ETag 缺失与归档超时连接占用记录为已知取舍。未提交 `.env`（gitignored）和无关 PRD。
-- 状态：已在 `feat/minio-storage-local` 提交（提交信息 `feat: 接入 MinIO 统一存储门面`，hash 以 `git log` 为准）；未 push/merge，等待用户确认。
+- 状态：已提交（提交信息 `feat: 接入 MinIO 统一存储门面`，hash 以 `git log` 为准）。
+- 用户选择 Postgres 恢复方案 C 并同意 push/merge：已把旧卷 `esimage_esimage_pgdata` 复制到新卷 `esimage_pgdata`，容器恢复 healthy，库内 18 张表、4 个用户；旧卷保留。
+- 已合并 `origin/main`（`3878e33`，8 号聊天记录）；冲突仅在记忆需求表与 `backend/.env.example`，保留双方内容，并为本地 `.env` 补充 `MODEL_CONFIG_ENCRYPTION_KEY`。合并后全量测试仍仅 2 个既有 `test_ops` 失败。
+- 下一步：推送功能分支并快进合并 `main`。
