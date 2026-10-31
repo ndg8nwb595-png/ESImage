@@ -215,3 +215,20 @@
 - **JWT**：HS256，载荷 `sub`（字符串）、`exp`、`iat`、`token_version`、`roles`、`permissions`；`remember_me` 决定 24h / 7d；无 refresh token。
 - **审计**：登录成功/失败、退出均写 `audit_logs`，失败原因仅记 `bad_credentials`，不落密码；IP 取 `X-Forwarded-For` 首个地址或客户端地址。
 - **测试隔离**：`tests/conftest.py` 在导入应用前把 `DATABASE_URL` 指向 `esimage_test`，建库后 `drop_all/create_all` + 种子，测试不污染开发库。
+
+## 创作工作台后端最小 demo 实现约定（2026-10-31 用户确认）
+
+- **分支策略**：功能分支 `feat/workspace-backend-demo`；先提交模块骨架并推送，再实现并合并 `main`。并行会话会推进 `main`，提交前先 fetch/rebase。
+- **复用登录**：不重复实现 1 号 demo；直接使用 `core`、`models/user`、`models/audit`、`modules/auth`。仅扩展种子权限。
+- **模块位置**：`backend/app/models/workspace.py` 放六张共享 ORM；`backend/app/modules/workspace/` 放 2 号 demo 全部接口与演示管线；路由在 `main.py` 以 `/api/v1` 挂载。
+- **权限**：会话/消息用 `user.workspace`；上传/批次/预览用 `user.generate`；下载用 `user.history`；缺权限统一 403 `20005`。
+- **数据表**：新增 `creative_sessions`、`chat_messages`、`agent_runs`、`generation_batches`、`generated_images`、`uploaded_assets`；不建 `templates` / `size_presets` / `material_assets`。
+- **对象存储**：本地目录适配器 `STORAGE_ROOT`（默认 `backend/storage`）；上传原图 `uploads/`、生成图 `generated/`、缩略图 `thumbnails/`；路径做穿越校验；`backend/storage` 与测试存储目录已忽略。路径层级是 demo 简化，正式实现再补 session/batch 层级。
+- **演示管线**：`BackgroundTasks` + 轮询；示例批次 `queued→running→sample_ready`，全套 `queued→running→completed`；阶段依次写入（含 `product_understanding` / `copywriter` / `prompt_builder`）；占位 PNG 由 Pillow 生成；`DEMO_PIPELINE_STAGE_DELAY` 控制停顿；`completed` 与 `is_history_visible` 同一事务提交。
+- **上传图绑定**：未绑定会话的上传图首次生成时回填 `session_id`，按 `upload_ids` 顺序写 `sort_order`；已绑定其他会话的上传图返回 30006；单张 ≤10MB、解码后 ≤4000 万像素。
+- **并发与幂等**：单实例用模块级 `threading.RLock` 串行化「聊天幂等、批次并发、上传数量、确认全套」的 check-then-act；数据库唯一索引兜底。同一用户 `queued/running` 最多 1 个；`sample_ready` 不占名额；确认时对示例批次 `SELECT ... FOR UPDATE`。
+- **幂等键**：`client_message_id` / `client_request_id` 必须是 UUID；聊天按 `(session_id, client_message_id)`、无会话时按 `(user_id, client_message_id)` 去重；处理中返回 409/30005，已完成重放，失败可复用原用户消息重试。
+- **尺寸边界**：演示管线按请求宽高创建位图，宽高上限 4096，超出返回 10004「宽高超出范围」。
+- **额外接口**：实现 `GET /images/{id}/thumbnail`，因为批次响应里的 `thumbnail_url` 需要可读取；与 5 号文档约定一致，不影响 2 号已有接口。
+- **本地数据库复用**：并行开发共用已运行的 `esimage-postgres`（55433）；本模块使用独立库 `esimage_workspace`、测试库 `esimage_workspace_test`，不覆盖其他项目的库。
+- **curl 编码**：Windows Git Bash 下中文 JSON 不能直接放进 `-d`；统一用 Python 生成 UTF-8 文件 + `--data-binary @文件`。

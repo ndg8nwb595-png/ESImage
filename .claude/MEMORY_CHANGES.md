@@ -642,3 +642,67 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 - 审计：登录成功/失败/退出均落 `audit_logs`；失败 `detail={"reason":"bad_credentials"}`；未知账号 `user_id` 为空；全部记录不含密码（SQL 检索 `Demo1234` 计数为 0）。
 - 响应头：`content-type: application/json`（未带 `charset=utf-8`，JSON 本身固定 UTF-8，与文档的写法属等价表述）。
 - 未覆盖：`50002` 无法通过 curl 安全触发，改由 pytest 依赖覆盖模拟数据库异常验证。
+
+## 2026-10-31 会话 15：创作工作台后端最小 demo 实现
+
+### 新增文件
+
+1. `backend/app/models/workspace.py` —— 六张工作台表：`creative_sessions`、`chat_messages`、`agent_runs`、`generation_batches`、`generated_images`、`uploaded_assets`。
+2. `backend/app/modules/workspace/router.py` —— 汇总 sessions / uploads / generations 路由。
+3. `backend/app/modules/workspace/schemas.py` —— `WorkspaceParams`、`ChatMessageRequest`、`SampleGenerationRequest`、`ConfirmGenerationRequest`。
+4. `backend/app/modules/workspace/service.py` —— 商品名称/风格/尺寸/模板/消息校验、UUID 幂等键、权限依赖、会话归属、进程内锁、序列化与文件名工具。
+5. `backend/app/modules/workspace/sessions.py` —— 会话列表、消息分页、两个 SSE 聊天接口；幂等重放/409/失败重试；断线标记 failed。
+6. `backend/app/modules/workspace/uploads.py` —— 上传、元数据、软删除、原图/缩略图读取；数量与像素边界保护。
+7. `backend/app/modules/workspace/generations.py` —— 示例批次、批次查询、确认全套、图片预览/缩略图/下载；锁内幂等与并发校验。
+8. `backend/app/modules/workspace/pipeline.py` —— 示例/全套演示管线，阶段推进、占位图、历史可见性原子提交。
+9. `backend/app/modules/workspace/imaging.py` —— 占位 PNG、WebP 缩略图（质量 80）、像素上限校验。
+10. `backend/app/modules/workspace/storage.py` —— 本地存储适配层与路径穿越防护。
+11. `backend/app/modules/workspace/README.md` —— 模块目录与约定。
+12. `backend/tests/test_workspace.py` —— 24 个接口用例，含并发幂等、权限、隔离、分页、校验。
+13. `backend/scripts/curl_smoke.sh` —— 真实服务 curl 验收脚本。
+14. `backend/README.md` —— 本地启动、演示账号、curl 验收、测试与最小 demo 限制。
+
+### 修改文件
+
+1. `backend/app/models/__init__.py` —— 注册六个新模型。
+2. `backend/app/main.py` —— 挂载 `workspace_router`；请求校验按字段返回商品名称/消息/文件/宽高的明确文案。
+3. `backend/app/core/config.py` —— 新增 `STORAGE_ROOT`、`DEMO_PIPELINE_STAGE_DELAY`。
+4. `backend/app/modules/auth/seed.py` —— 新增 `user.generate` 权限并授予 `user` / `super_admin`。
+5. `backend/tests/test_auth.py` —— 同步三处权限断言（加入 `user.generate`）。
+6. `backend/tests/conftest.py` —— 测试期关闭管线停顿、使用独立测试存储目录。
+7. `backend/requirements.txt` —— 增加 `python-multipart`、`Pillow`。
+8. `backend/.env.example` —— 数据库端口修正为 55433，补充存储与管线变量。
+9. `.gitignore` —— 忽略 `backend/storage/`、`backend/.pytest_storage/`、`backend/.curl_tmp/`。
+
+### 验证
+
+- `TEST_DB_NAME=esimage_workspace_test PYTHONPATH=. python -m pytest -q` → **55 passed**。
+- `python -m compileall -q app scripts` → 通过。
+- `bash scripts/curl_smoke.sh`（`DATABASE_URL=...55433/esimage_workspace`）逐条通过：
+  - 登录 / `/auth/me` / `/auth/logout` 200；
+  - 首条消息 SSE 返回 `meta` + 两个 Agent 状态 + `delta` + `done`，新建会话；
+  - 会话列表与消息分页 200；
+  - 两张商品图上传 200，`/content` 与 `/thumbnail` 200，元数据恢复 200；
+  - 示例批次创建 200（`queued`），轮询至 `sample_ready`，示例图预览 200，下载 409/30005；
+  - 确认全套 200，轮询至 `completed`，6/6 张，第 1 张主图 + 5 张详情图；
+  - 主图/详情图下载 200，`Content-Disposition` 文件名符合规则；
+  - 软删除上传图 200，再读 404/30014；
+  - 管理员 `GET /sessions` 403/20005；商品名称为空 400/10002。
+- 复用本机已运行的 `esimage-postgres`（55433），在容器内新建独立库 `esimage_workspace`；未改动其他项目的 `esimage` / `esimage_test`。
+
+### 独立审查修复（同日）
+
+- 聊天并发：加进程内锁；`IntegrityError` 回滚后按已保存消息重放/409；SSE 断线把 `sending` 标记 `failed`，失败可复用原用户消息重试。
+- 确认并发：锁内重新做同 key 幂等判定；`db.flush()` 移入 try；并发同 key 两个请求返回同一全套批次。
+- 批次/上传并发：创建示例、确认全套、上传数量都放入同一临界区，避免 check-then-act 穿透。
+- 宽高上限 4096、上传解码像素上限 4000 万、`file.size` 预检，避免 OOM。
+- 全套管线补齐前 3 个阶段；`completed` 与 `is_history_visible` 改为同一事务提交。
+- 必填字段/类型错误的文案按字段映射；幂等键改为 UUID 校验。
+- curl 脚本端口修正为 55433，幂等键改为 UUID。
+- 测试补强：分页断言第一页确为最新消息；新增聊天并发、确认并发、非 UUID、缺少文件用例。
+
+### 已知限制
+
+- `chrome-devtools` MCP 连接超时，未使用浏览器验证；本次仅后端。
+- 未配置真实文本模型与豆包生图，聊天与生图为演示桩/占位图。
+- SSE 心跳 `ping` 未实现；归档下载分支未实现；`superseded` 图片默认不返回。以上均为最小 demo 取舍。

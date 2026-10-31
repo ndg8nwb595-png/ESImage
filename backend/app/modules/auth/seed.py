@@ -13,16 +13,18 @@ DEMO_PASSWORD = "Demo1234"
 # 最小 demo 只种登录演示用到的权限点
 PERMISSIONS: list[tuple[str, str, str, str | None, bool, str]] = [
     ("user.workspace", "创作台", "menu", "用户端", False, "进入创作工作台"),
+    ("user.generate", "生成图片", "action", "用户端", False, "上传商品图、生成示例图与全套图"),
     ("user.history", "历史作品", "menu", "用户端", False, "查看历史作品"),
     ("user.profile", "个人中心", "menu", "用户端", False, "进入个人中心"),
     ("admin.dashboard.view", "管理概览", "menu", "概览", False, "查看管理后台概览"),
 ]
 
 ROLE_PERMISSIONS: dict[str, list[str]] = {
-    "user": ["user.workspace", "user.history", "user.profile"],
+    "user": ["user.workspace", "user.generate", "user.history", "user.profile"],
     "admin": ["admin.dashboard.view"],
     "super_admin": [
         "user.workspace",
+        "user.generate",
         "user.history",
         "user.profile",
         "admin.dashboard.view",

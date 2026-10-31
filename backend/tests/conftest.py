@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 # 必须在导入 app.* 之前覆盖环境变量，确保 engine 指向测试库
 TEST_DB_HOST = os.getenv("TEST_DB_HOST", "127.0.0.1")
@@ -22,6 +23,12 @@ ADMIN_DATABASE_URL = (
 
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ.setdefault("JWT_SECRET", "test-only-secret-esimage-0123456789abcdef")
+# 测试时不等待演示管线阶段停顿，并把本地存储放到独立的测试目录
+os.environ.setdefault("DEMO_PIPELINE_STAGE_DELAY", "0")
+os.environ.setdefault(
+    "STORAGE_ROOT",
+    str(Path(__file__).resolve().parent.parent / ".pytest_storage"),
+)
 
 import pytest  # noqa: E402
 from sqlalchemy import create_engine, delete, select, text  # noqa: E402

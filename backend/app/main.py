@@ -13,6 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.response import ApiError, error_body
 from app.modules.auth.router import router as auth_router
+from app.modules.workspace.router import router as workspace_router
 
 logger = logging.getLogger("esimage")
 
@@ -30,6 +31,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router, prefix="/api/v1")
+app.include_router(workspace_router, prefix="/api/v1")
 
 
 @app.exception_handler(ApiError)
@@ -44,7 +46,23 @@ async def handle_api_error(request: Request, exc: ApiError) -> JSONResponse:
 @app.exception_handler(RequestValidationError)
 async def handle_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
     """请求体/查询参数校验失败 -> 400 + 1xxx。"""
-    missing = any(error.get("type") == "missing" for error in exc.errors())
+    errors = exc.errors()
+    missing = any(error.get("type") == "missing" for error in errors)
+    field = ""
+    if errors:
+        loc = errors[0].get("loc") or ()
+        field = str(loc[-1]) if loc else ""
+
+    # 工作台接口的关键字段按接口文档返回明确文案
+    if field == "product_name":
+        return JSONResponse(status_code=400, content=error_body(10002, "请先填写商品名称"))
+    if field == "content":
+        return JSONResponse(status_code=400, content=error_body(10002, "请输入内容"))
+    if field == "file":
+        return JSONResponse(status_code=400, content=error_body(10002, "请选择要上传的图片"))
+    if field in ("width", "height"):
+        return JSONResponse(status_code=400, content=error_body(10003, "宽高需为正整数"))
+
     if missing:
         return JSONResponse(status_code=400, content=error_body(10002, "缺少必填参数"))
     return JSONResponse(status_code=400, content=error_body(10003, "参数格式错误"))

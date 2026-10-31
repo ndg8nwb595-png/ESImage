@@ -99,3 +99,15 @@
 - **curl 校验要覆盖“成功 + 每种失败”**：成功看字段与类型，失败看 HTTP 状态、业务码、message、`data=null` 四件套；过期/版本不符/伪造角色等 token 用例可用后端密钥现签，避免改库。
 - **Windows 下的 venv Python 读不到 Git Bash 的 `/tmp`**：`/tmp/x.json` 在 Windows Python 里不存在，且默认 `open()` 用 GBK；临时文件放仓库内相对路径并显式 `encoding="utf-8"`。
 - **验证改动的服务要重启**：uvicorn 未开 `--reload` 时，改完代码必须停掉后台任务再启动，否则 curl 仍打到旧进程。
+- **Windows Git Bash 的 `curl -d '{"中文":...}'` 会 400**：终端把中文按本地编码传给 curl，FastAPI 报 `There was an error parsing the body`。用 Python 生成 UTF-8 JSON 文件，再 `curl --data-binary @file`；ASCII 请求体不受影响。
+- **Git Bash 的 `/tmp` 与 Windows Python 的 `/tmp` 不是同一路径**：Python 在 Windows 上把 `/tmp/x` 写到当前盘根目录，curl 则映射到用户临时目录，导致“文件找不到”。脚本用仓库内相对目录（如 `backend/.curl_tmp`）最稳。
+- **并行 agent 共用 Docker 时先 `docker ps`**：本机已有 `esimage-postgres`（55433），直接复用容器、另建独立数据库（`esimage_workspace` / `esimage_workspace_test`），不要 `docker compose up` 覆盖别人的容器或库。
+- **复用已有登录模块前先 fetch `origin/main`**：并行会话可能已实现 auth；先看 `git ls-tree origin/main -- backend`，避免重复造一遍 core/models/auth。
+- **改种子权限要同步旧测试**：给 `demo_user` 增加 `user.generate` 后，登录 demo 的 3 处精确权限断言会失败；同步断言而不是回退权限。
+- **FastAPI `BackgroundTasks` 在 TestClient 里是同步完成的**：`client.post` 返回时后台管线已经跑完，断言不到 `queued/running`；要测并发限制就直接往数据库插一条 `running` 批次。
+- **同一批插入的用户消息与 Agent 回复 `created_at` 相同**：PostgreSQL `now()` 取事务开始时间；分页排序必须再加 `id` 作为次序，否则页内顺序不稳定。
+- **返回了 URL 就要保证能被调用**：批次响应给了 `/images/{id}/thumbnail`，即使 2 号接口清单没列，也要实现该读取接口，否则前端/curl 会 404。
+- **并发重复聊天返回 409 是正确的**：第一个请求已把 Agent 回复写成 `sending`，第二个同幂等键请求按文档 §7.4 返回 409；不要断言两个并发请求都 200。测试应断言「无重复会话/用户消息」。
+- **只加普通 `SELECT` 去重挡不住并发**：首条消息无 `session_id` 时唯一索引是 `(session_id, client_message_id)`，两个并发请求会各建会话；需进程内锁或用户维度唯一约束。
+- **宽高/图片像素必须设上限**：演示管线按请求宽高 `Image.new`，上传按解码像素分配内存；不加限制时一个大尺寸请求就能 OOM，后台任务的 try/except 救不回来。
+- **`completed` 与 `is_history_visible` 要同事务**：先提交 completed 再置可见，会出现「前端看到完成但下载 30005」的窗口。

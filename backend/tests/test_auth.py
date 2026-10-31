@@ -47,7 +47,12 @@ def test_login_success_and_response_shape(client):
     assert data["user"]["display_name"] == "演示用户"
     assert data["user"]["avatar_url"] is None
     assert data["user"]["roles"] == ["user"]
-    assert data["user"]["permissions"] == ["user.history", "user.profile", "user.workspace"]
+    assert data["user"]["permissions"] == [
+        "user.generate",
+        "user.history",
+        "user.profile",
+        "user.workspace",
+    ]
 
     print("[测试] 步骤 3：校验 JWT 载荷")
     payload = jwt.decode(data["token"], settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
@@ -92,6 +97,7 @@ def test_dual_role_account_has_both_permission_groups(client):
     assert user["roles"] == ["admin", "user"]
     assert set(user["permissions"]) == {
         "user.workspace",
+        "user.generate",
         "user.history",
         "user.profile",
         "admin.dashboard.view",
@@ -201,7 +207,12 @@ def test_me_returns_current_user(client):
     assert data["user"]["display_name"] == "演示用户"
     assert data["user"]["avatar_url"] is None
     assert data["roles"] == ["user"]
-    assert data["permissions"] == ["user.history", "user.profile", "user.workspace"]
+    assert data["permissions"] == [
+        "user.generate",
+        "user.history",
+        "user.profile",
+        "user.workspace",
+    ]
 
 
 def test_me_without_token_returns_20003(client):

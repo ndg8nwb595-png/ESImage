@@ -228,3 +228,19 @@
 
 - 验证：`pytest` 35 passed；真实服务用 curl 按接口文档逐项校验通过（含成功、参数错误、凭据错误、token 失效/过期/版本不符/禁用、退出与审计）。
 - 演示账号：`demo_user` / `demo_admin` / `demo_dual`，密码 `Demo1234`。
+
+## 2026-10-31 会话 15：创作工作台后端最小 demo 代码实现
+
+| 需求 | 状态 | 实现手段 |
+| --- | --- | --- |
+| 工作台最小数据表（ticket 01） | 完成 | `models/workspace.py` 六张表：`creative_sessions`、`chat_messages`、`agent_runs`、`generation_batches`、`generated_images`、`uploaded_assets`；字段、约束、索引对齐 10 号 §4.6~§4.11 |
+| 演示权限（ticket 01） | 完成 | `auth/seed.py` 新增 `user.generate`，授予 `user` 与 `super_admin`；同步 `test_auth.py` 权限断言 |
+| 会话列表与消息分页（ticket 04） | 完成 | `GET /sessions`（≤50、`last_message_preview`、`latest_batch_id`）、`GET /sessions/{id}/messages`（分页、页内升序、`30013`） |
+| 聊天轻链路 SSE（ticket 04） | 完成 | `POST /sessions/messages`、`POST /sessions/{id}/messages`；`meta/agent_status/delta/done`；规划 + 商品理解两个 Agent；`client_message_id` 幂等；`agent_runs` 落库 |
+| 商品图上传与恢复（ticket 03） | 完成 | `POST /uploads` 二次校验格式/大小/可解码/未绑定数量 ≤5；`GET/DELETE /uploads/{id}`；`/content`、`/thumbnail`；本地存储 + WebP 缩略图 |
+| 示例批次与阶段进度（ticket 05） | 完成 | `POST /generations/sample`（无会话原子建会话、幂等、并发 30003、上传图绑定与排序、参数快照）；演示管线阶段推进；`GET /generations/{id}` |
+| 确认全套与结果网格（ticket 06） | 完成 | `POST /generations/{id}/confirm`（行锁、最新可确认、幂等、复用示例图为主图、5 张详情图、`is_history_visible`） |
+| 预览与单张下载（ticket 07） | 完成 | `GET /images/{id}/content`、`/thumbnail`、`/download`；示例图下载 409 `30005`；文件名规则与非法字符替换 |
+| curl 验收脚本 | 完成 | `backend/scripts/curl_smoke.sh` 临时起服务并逐条调用全部接口；UTF-8 JSON 文件 + `--data-binary` |
+| 测试 | 完成 | `tests/test_workspace.py` 20 个用例；全量 `pytest` 51 passed |
+| 独立审查 | 进行中 | 已启动只读审查 agent，等待结果后修复并复测 |

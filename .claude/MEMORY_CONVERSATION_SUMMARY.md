@@ -193,3 +193,17 @@
 - 前端：本轮已起草 Vite + React + TS 脚手架与登录页方案，用户随即要求「把前端文件删了……不用开发前端」，5 个前端文件已删除，`frontend/` 仅保留骨架目录。
 - 收尾：功能分支 rebase 到最新 `origin/main`（`5c4f05d`；记忆文档与并行会话记录冲突时双方内容都保留）后推送，再 `--ff-only` 合并到 `main` 并推送。
 - 未提交仓库根 `SKILL.md`（全局技能副本，不属于本项目需求）。
+
+## 2026-10-31 会话 15：创作工作台后端最小 demo 实现
+
+- 用户要求：新建分支开发；先梳理项目层级、建模块文件夹并先 push 到分支再 merge 到 main；然后开发 `docs/prd/2-用户端创作工作台` 的后端，确保每个接口能用 curl 调通。
+- 用户补充：本机有其他 agent 在不同分支并行开发，调试时复用已有进程，尤其是 Docker；本次复用了已运行的 `esimage-postgres` 容器（端口 55433），并在其中创建独立库 `esimage_workspace`，未触碰其他项目的 `esimage` / `esimage_test` 库。
+- `chrome-devtools` MCP 连接超时，未能连接；本次为纯后端 + curl 验证，不依赖浏览器 MCP。
+- 开始实现时发现 `origin/main` 已被并行会话推进，登录最小 demo 后端已合入（`ede918e`）。因此没有重复实现登录，直接把分支重置到最新 `main` 并复用现有 `core` / `models` / `auth`。
+- 新增 `backend/app/models/workspace.py`：`creative_sessions`、`chat_messages`、`agent_runs`、`generation_batches`、`generated_images`、`uploaded_assets` 六张表，字段与 10 号 §4.6~§4.11 对齐。
+- 新增 `backend/app/modules/workspace/`：sessions（会话列表/消息分页/SSE）、uploads（上传/恢复/软删除/内容/缩略图）、generations（示例批次/轮询/确认全套/预览/下载）、pipeline（演示管线）、imaging（占位 PNG/WebP 缩略图）、storage（本地存储）、service（校验/权限/序列化）、schemas、router。
+- 扩展 `auth/seed.py`：新增 `user.generate` 权限并授予 `user` 与 `super_admin`；同步修正 `test_auth.py` 三处权限断言。
+- 新增 `backend/tests/test_workspace.py`（20 个用例）、`backend/scripts/curl_smoke.sh`、`backend/README.md`、workspace 模块 README。
+- 验证：`TEST_DB_NAME=esimage_workspace_test python -m pytest` 全量 51 项通过；curl 脚本逐条调通全部工作台接口（SSE、上传、示例生成、确认全套、预览、下载、软删除、权限与参数错误）。
+- Windows Git Bash 坑：`curl -d '{"中文":...}'` 会被终端按本地编码处理导致后端 400；脚本改为 Python 生成 UTF-8 JSON 文件并用 `curl --data-binary @文件`。
+- 收尾：独立审查、commit / push、merge 到 main 与记忆文档更新见后续记录。

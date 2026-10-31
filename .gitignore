@@ -17,6 +17,11 @@ node_modules/
 dist/
 .vite/
 
+# 本地对象存储（最小 demo 替代 MinIO，不入库）
+backend/storage/
+backend/.pytest_storage/
+backend/.curl_tmp/
+
 # 日志与临时文件
 *.log
 logs/

@@ -33,6 +33,13 @@ class Settings:
         # 接口时间统一为东八区
         self.TZ = timezone(timedelta(hours=8))
 
+        # 最小 demo 的本地对象存储根目录（替代 MinIO）
+        storage_root = Path(os.getenv("STORAGE_ROOT", "storage"))
+        self.STORAGE_ROOT = storage_root if storage_root.is_absolute() else BASE_DIR / storage_root
+
+        # 演示生成管线每个阶段的停顿秒数，便于前端观察阶段进度
+        self.DEMO_PIPELINE_STAGE_DELAY = float(os.getenv("DEMO_PIPELINE_STAGE_DELAY", "0.15"))
+
         if not self.JWT_SECRET:
             raise RuntimeError(
                 "缺少 JWT_SECRET 环境变量。请复制 backend/.env.example 为 backend/.env 并设置随机密钥。"
