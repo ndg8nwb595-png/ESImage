@@ -242,3 +242,26 @@
 - **模型复用**：3 号不重复定义 `creative_sessions`/`chat_messages`/`agent_runs`/`generation_batches` 等表；开发时直接复用 2 号提供的 `app/models/workspace.py`，避免两套 ORM 导致建表冲突。
 - **环境复用**：本地 PostgreSQL 复用并行 agent 已启动的 `esimage-postgres`（宿主端口 55433）；8000 端口被 1 号登录 demo 的 uvicorn 占用，3 号调试改用其他端口。
 - **网络限制**：当前 `github.com:443` 连接超时，`git fetch/push` 失败；骨架提交已本地完成并合并 `main`，推送待网络恢复后补做。
+
+## 10 号数据底座 demo 约定（文档提案，待用户确认）
+
+- **迁移**：10 号 demo 必须使用 Alembic 并可正反向执行；与 2/4/6/8 号 demo 的建表脚本不同，因为「迁移可回滚」是 10 号核心验收项。
+- **存储后端**：默认本地目录适配器模拟单桶 `esimage`，对象键与前缀与 MinIO 完全一致；正式实现切 MinIO 不改路径契约；不把存储根目录暴露为静态站点。
+- **幂等**：不引入 Redis。消息用 `(session_id, client_message_id)` 部分唯一索引；首条消息并发建会话用数据库事务/咨询锁；批次用 `client_request_id` 部分唯一索引。
+- **归档**：手动命令 + `--now` 注入时钟；`ARCHIVE_RETENTION_DAYS` 默认 1825；复制 → 校验大小 → 删除原件 → 回写 `archived_at`；缩略图不归档；单条失败不阻塞。
+- **种子**：角色 3、权限 23、超管权限 23 行、尺寸 4、提示词 8 + 版本 8、模型配置 1；按唯一键判重，不覆盖已修改数据；首个超管必须显式环境变量。
+- **数据边界**：所有外键 `RESTRICT`；业务数据不物理删除；`source_sample_batch_id` / `source_image_id` 暂按应用层校验，未加外键。
+- **实现顺序**：01 身份/审计表 → 02 内容域表 → 03 配置域表与种子 → 04/05/06 三条数据链路 → 07 归档 → 08 回归；02 与 03 都新增迁移，必须顺序执行，避免两个 Alembic head。
+
+## 11 号部署与运维最小 demo（2026-10-31 用户确认）
+
+- **文档组织**：11 号 PRD 及其实现文档统一放在 `docs/prd/11-部署与运维/`，含 PRD 本体、`README.md`、`issues/`（01~08）、`接口文档-部署与运维最小demo.md`；`docs/prd/` 顶层不再保留该 PRD。
+- **引用路径**：0 号索引与 9 号关联文档用 `11-部署与运维/11-部署与运维prd.md`；文件夹内文档用 `./` 或相对文件名；10 号接口文档用 `../11-部署与运维/11-部署与运维prd.md`。
+- **最小 demo 定位**：部署运行壳，不是业务实现。交付 Compose 拓扑、依赖健康、迁移种子、应用镜像、双健康探针、网关、日志、备份恢复、Worker/Beat 基线与验收脚本；业务页面与接口由 1~10 号 demo 提供。
+- **健康接口双路径**：`GET /api/health` 保持 11 号裸结构 `{status,checks}` 供容器/网关探活；`GET /api/v1/health` 返回 9 号统一响应 `{code,message,data}`。两者共用一次检测；降级统一 HTTP 503，`/api/v1/health` 用业务码 `50001`；该差异列入待确认。
+- **任务范围**：8 个切片——01 Compose 基线与依赖服务；02 迁移/种子/初始超管；03 应用镜像与双健康探针；04 Nginx 网关与 SSE；05 结构化日志与 `request_id`；06 备份与恢复；07 Worker/Beat 基线；08 一键启动与验收。
+- **依赖**：01 → 02 → 03 → {04,05,06,07}；08 依赖 04~07。06 只额外依赖 02/03；04~07 可并行。
+- **最小化取舍**：只起 Worker/Beat，不注册归档/孤儿清理/导出清理等业务定时任务；审计业务写入、HTTPS/443、MinIO 控制台、Prometheus/Grafana、多机/灰度/容灾均不做；初始超管只校验创建与 bcrypt，登录闭环属 1 号 demo。
+- **演示专用接口/任务**：`GET /api/v1/sessions/_probe/stream`（验证 Nginx 不缓冲）与 `ops.selftest`（验证 Worker 与 `request_id` 透传），仅 `APP_ENV != production` 启用，生产 404/不注册；是否长期保留待确认。
+- **契约口径**：只有 nginx 暴露 80；`client_max_body_size 12m`；API 读超时 300s；SSE 关闭缓冲/缓存并清空 `Connection`；安全头使用 `always`；`X-Request-ID` 复用或生成 UUIDv4；日志 JSON 按天轮转 90 份压缩；备份保留 7 天。
+- **待统一项**：README §6 与接口文档 §10 的 14 项，重点是双健康接口差异、健康接口鉴权、`X-Request-ID` 头名、失败值/超时、安全头取值、初始密码规则、演示专用接口、413 响应体、恢复覆盖语义、Nginx 日志轮转、MinIO 前缀、空调度、stdout 保留。

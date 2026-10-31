@@ -260,3 +260,31 @@
 - 已确认范围：只做后端；`PATCH/DELETE /sessions/{id}`、消息分页惰性超时、聊天 SSE 的 `meta.duplicate` 与 `done.requirement_changed`、轻链路与 10 轮上下文、`agent_runs` 落库、需求变化判定。
 - 明确不做：`POST /sessions`、会话恢复、取消接口、`agent_runs` 查询、消息搜索/导出、管理端聊天、聊天触发生图、真实内容审核与 Token 计费。
 - 环境：复用 docker `esimage-postgres`（55433）；chrome-devtools MCP 已连接（1 个 about:blank 页面），留作后端 OpenAPI/Swagger 验证。
+
+## 10 号数据模型与存储最小 demo（文档任务）
+
+| 需求 | 状态 | 实现手段 |
+| --- | --- | --- |
+| PRD 移入独立目录 | 完成 | `git mv` 到 `docs/prd/10-数据模型与存储/10-数据模型与存储prd.md` |
+| 最小 demo 任务拆解 | 完成 | 8 个垂直切片，`issues/01~08` |
+| 最小 demo 接口文档 | 完成 | `接口文档-数据模型与存储最小demo.md`：18 表、迁移/种子命令、存储路径、归档、验收 |
+| 数据底座范围 | 已界定 | 18 表 + Alembic + 幂等种子 + 超管 + 存储路径 + 5 年归档 + 回归 |
+| 明确不做 | 已记录 | 备份恢复（11 号）、导出及清理（7 号）、孤儿清理、pg_trgm、Redis、Celery、真实 MinIO、业务 HTTP |
+| 待用户确认 | 17 项 | 超管权限落行、上传缩略图/未绑定路径、`source_*` 外键、`client_request_id` 跨用户、归档策略、密码策略、动作码等 |
+
+## 2026-10-31 会话 15：11 号部署与运维最小 demo（文档任务）
+
+| 需求 | 状态 | 实现手段 |
+| --- | --- | --- |
+| PRD 移入独立目录 | 完成 | `git mv` 到 `docs/prd/11-部署与运维/11-部署与运维prd.md`；同步 0 号索引、9 号关联文档、10 号接口文档引用 |
+| 最小 demo 任务拆解 | 完成 | 8 个垂直切片，`issues/01~08`，按依赖顺序编号 |
+| 最小 demo 接口文档 | 完成 | `接口文档-部署与运维最小demo.md`：双健康探针、网关/SSE、Compose 契约、脚本 CLI、定时任务、日志、错误码、验收矩阵 |
+| 发布到 GitHub issue | 未做（按用户要求输出到本地文件夹） | 如需发布可再执行 `gh issue create` |
+| 最小 demo 代码实现 | 未开始 | 按 01→02→03→{04,05,06,07}→08 顺序推进；04~07 可并行 |
+
+### 最小 demo 范围
+
+- 做：单机 Compose 基线、依赖服务与 MinIO 桶/前缀、Alembic 迁移与幂等种子、初始超管、backend/frontend/worker/beat 镜像、双健康探针、Nginx 网关与 SSE、结构化日志与 `request_id`、备份恢复、Worker/Beat 基线、一键启动与验收脚本。
+- 不做：5 年归档、孤儿上传清理、导出清理、权限缓存刷新、审计业务写入、HTTPS/443、MinIO 控制台、Prometheus/Grafana、多机/灰度/容灾、业务页面与业务接口、真实生成链路。
+- 用户确认的取舍：8 个切片；只起 Worker/Beat、不做归档；健康接口双路径；PRD 移动并更新引用。
+- 演示专用：`GET /api/v1/sessions/_probe/stream` 与 `ops.selftest`，仅非生产启用，待正式确认是否保留。
