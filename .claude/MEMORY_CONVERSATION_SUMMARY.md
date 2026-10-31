@@ -398,3 +398,25 @@
 - `feat/generation-backend-demo` 已 rebase 到 MinIO main 并合并到 `main`：`487dd47`。
 - 最终验证：全量 pytest **191 passed（2 skipped）**；替身 curl 在 local 与 MinIO 后端均全接口通过；MinIO 真实验收（fake 全套 6/6 + 真实重生成一张）新图 success、批次 completed 6/6、单张下载与 ZIP 均 200。
 - 真实全套 6/6 的完整真实模型版本在容器重建前已完成过（旧本地存储）；MinIO 下的完整 6 张真实图未重跑，真实 Seedream 出图与存储读写已由重生成验收覆盖。
+
+## 2026-11-01 会话 21：前后端联调与 chrome-devtools MCP 验收
+
+- 用户要求：先拉最新 `main`，把前后端服务都起来，用 chrome-devtools MCP 开始联调测试。
+- 已把 `main` 从 `6c3adb5` 快进到 `22fa754`（包含 4 号生图后端合并 MinIO 与真实验收）。
+- 环境：Docker 提供 PostgreSQL（宿主 55433）、Redis（6379）、MinIO（9002/9003）；后端在宿主机 8010，设置 `APP_ENV=test`、`GENERATION_MODEL_PROVIDER=fake`、`AGENT_RETRY_BACKOFF_SCALE=0`，并把 `DATABASE_URL` 指向 `esimage_generation`（该库已有 `generated_images.client_request_id`）；前端 Vite 5173，代理 `/api` → `http://127.0.0.1:8010`。全程未调用真实豆包。
+- 用户端（demo_user / Demo1234）验收通过：登录 → 填写商品名与风格 → 聊天 SSE → 生成示例图 → 确认全套 6/6 → 预览与单图下载 200 → 历史列表/详情 → 整组 ZIP 200；核心接口均 200。
+- 管理端（demo_super / Demo1234）验收通过：概览、账号与角色、内容追溯、聊天记录、素材/模板/尺寸、Agent 配置（模型配置 + 8 个提示词）、操作日志、个人中心均可打开，接口 200。
+- 发现 1（数据遗留）：历史列表中旧图片 ID 5/15/25/35/183/193/202/212 的缩略图 404；`esimage_generation` 库 264 条缩略图记录中有 76 条在 MinIO 不存在，路径为切换 MinIO 前的扁平 `thumbnails/1/<uuid>.webp` 形式。属本地种子/迁移遗留数据，不是本次代码回归。
+- 发现 2（前端警告）：`/profile` 控制台报 `Instance created by useForm is not connected to any Form element`，栈指向 `ProfilePage.tsx:24` 的 `form.setFieldsValue(p)`；加载中页面只渲染 Skeleton，Form 尚未挂载。实测字段值能正常显示，属警告级问题。另有 React Router v7 future flag 警告，属正常提示。
+- 本次未修改任何代码或配置，未提交；后端与 Vite 仍在后台运行（后端任务 `b7d18sifv`，Vite 任务 `bn4yq73le`）。
+
+## 2026-11-01 会话 22：修复工作台聊天输入框需要下拉才能看到
+
+- 用户反馈：进入创作工作台后，对话框需要向下滚动才能看到，首屏应该直接可见。
+- 复现：在 2048×898 视口打开 `/workspace`，`document.scrollHeight=1733`、`innerHeight=898`；聊天输入框 `top=1649`，确实在首屏之外。
+- 根因：`antd` 的 `App` 组件默认渲染 `.ant-app` 包裹层，高度为 auto；`AppLayout` 的 `height:100%` 没有确定参照，被内容撑到 1733px；`.workspace` 又用 `height:100%`，形成同样的百分比高度失效链，右侧栏内容把整页撑高。
+- 修复（分支 `fix/workspace-chat-visible`）：
+  1. `frontend/src/app/App.tsx` 给 `<AntdApp>` 显式加 `style={{ height: '100%' }}`，让 `#root` 的 100% 高度传导到 Layout。
+  2. `frontend/src/modules/workspace/workspace.css` 把 `.workspace` 的 `height:100%` 改为 `flex:1`，作为 `Layout.Content` 的 flex 子项占满剩余高度。
+- 验证：2048×898 与浏览器当前视口下 `document.scrollHeight === innerHeight`，输入框底边与视口底边对齐；聊天消息区、右侧参数区各自内部滚动；选择会话后发送一条消息，SSE 返回 200，消息数 2→4；`npm run build`（tsc + vite）通过；`npm test` 4 passed；控制台仅剩 React Router future flag 警告。
+- 未推送、未合并 `main`，等待用户确认。

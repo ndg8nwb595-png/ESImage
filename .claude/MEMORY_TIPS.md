@@ -253,3 +253,13 @@
 - **不要把 `storage.path()` 用在 MinIO 后端**：它只对 local 有效；统一用 `media_response` 或 `storage.read_bytes`。
 - **测试强制 local**：conftest 设置 `STORAGE_BACKEND=local`，所以本地 `.env` 用 minio 不影响 pytest；真实 curl 才走 MinIO。
 - **主分支新增启动必填 `MODEL_CONFIG_ENCRYPTION_KEY`**：缺了会启动失败，和豆包 Key 一样要写进 `.env`。
+- **本地联调不要直接用 `esimage` 库**：该共享库没有 `generated_images.client_request_id`，生图会报列不存在；改用已执行迁移的 `esimage_generation`，或先对目标库执行 Alembic。
+- **`fake` 生成模式必须同时满足 `APP_ENV=test`**：启动校验会拒绝 `GENERATION_MODEL_PROVIDER=fake` + 非 test 环境；联调时两者一起设置，并加 `AGENT_RETRY_BACKOFF_SCALE=0` 避免等待。
+- **前端开发代理写死 8010**：Vite `vite.config.ts` 的 `/api` 目标是 `127.0.0.1:8010`；后端换端口时前端也要改，否则全部接口 502/404。
+- **历史页旧图 404 先查对象是否在 MinIO**：`esimage_generation` 中 264 条缩略图有 76 条对象缺失，路径是旧扁平 `thumbnails/1/<uuid>.webp`；这是切换 MinIO 前的种子遗留，不是接口代码问题。用 `mc stat local/esimage/<path>` 验证，不要盲目改接口。
+- **`useForm` 未连接警告多来自“Form 还没渲染”**：`ProfilePage` 在 `loading` 时返回 Skeleton，却在 Promise 回调里先 `form.setFieldsValue`；应把赋值放进 loading 结束后的 effect（或改用 `initialValues`）。字段值可能仍能显示，因为 form store 存在，所以要看控制台栈定位，不要只按 UI 判断。
+- **开发环境同一个图片请求出现两次**：React 18 StrictMode 在开发模式会重复执行 effect；不是业务重试逻辑，生产构建不会重复。
+- **首屏内容被挤出视口先查“高度链”**：从目标元素向上遍历 `getBoundingClientRect().height` 与 `computedStyle.height`，本次发现 `.ant-app` 高度 1733px 是根因；只看 `.workspace` 会误以为是 flex 配置。
+- **antd `App` 包裹层默认没有高度**：`<AntdApp>` 会渲染一个 auto 高度的 div，内部 `Layout height:100%` 会失效；需要给 `<AntdApp style={{ height: '100%' }}>`，或全局给 `.ant-app { height:100% }`。
+- **flex 子项不要用 `height:100%` 填满父级**：父级高度由内容撑开时百分比高度会退化为 auto；用 `flex:1; min-height:0` 才能占满剩余空间并允许内部滚动。
+- **验证“首屏可见”用几何指标**：比较 `document.documentElement.scrollHeight` 与 `window.innerHeight`，并取目标元素 `getBoundingClientRect().bottom`；只看截图容易忽略页面仍可滚动。

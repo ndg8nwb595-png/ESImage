@@ -383,7 +383,32 @@
 | 推送记忆文件 | 完成 | 五个 `.claude/MEMORY_*.md` 独立提交并推送 `main` |
 | 补齐根 `.env` | 完成 | 按根 `.env.example` 补齐 31 个 compose 变量，保留原 `GITHUBTOKEN`；随机生成密钥与初始超管密码 |
 | 配置校验 | 完成 | `docker compose config -q` 通过；`.env` 被 `.gitignore` 忽略，未入库 |
-| 后端本地配置 | 无需改动 | `backend/.env` 已包含宿主机启动所需全部键，本次未改 || 既有缺陷修复 | 完成 | `admin/router.py` 显式导入子模块 `APIRouter`；管理后台路由补 `/admin` 前缀 || 待用户裁决 | 待确认 | 种子计数口径（21 可见 vs 文档“21 completed + partial”）；manifest 宽度/高度分列与 4 号“尺寸”单列差异 |- 已确认范围：只做后端；重命名、软删除、消息状态、轻链路、上下文、需求摘要、需求变化提示、`agent_runs` 明细。
+| 后端本地配置 | 无需改动 | `backend/.env` 已包含宿主机启动所需全部键，本次未改 || 既有缺陷修复 | 完成 | `admin/router.py` 显式导入子模块 `APIRouter`；管理后台路由补 `/admin` 前缀 || 待用户裁决 | 待确认 | 种子计数口径（21 可见 vs 文档“21 completed + partial”）；manifest 宽度/高度分列与 4 号“尺寸”单列差异 |
+
+## 2026-11-01 会话 21：前后端联调验收
+
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| 拉取最新 main | 完成 | `6c3adb5` → `22fa754`，快进合并 |
+| 后端启动 | 完成 | 宿主机 8010，fake 生成模式，`esimage_generation` 库；`/api/health` 三项 ok |
+| 前端启动 | 完成 | Vite 5173，`/api` 代理到 8010 |
+| 用户端主流程 | 通过 | demo_user：登录、聊天 SSE、示例图、确认全套 6/6、预览、单图下载、历史列表/详情、整组 ZIP |
+| 管理端页面 | 通过 | demo_super：概览、账号与角色、内容追溯、聊天记录、素材/模板/尺寸、Agent 配置、操作日志、个人中心 |
+| 核心接口状态 | 通过 | 联调链路接口均 200 |
+| 历史旧图缩略图 404 | 待用户决定 | 旧种子数据指向 MinIO 中不存在的对象；`esimage_generation` 库 264 条中 76 条缺失 |
+| ProfilePage useForm 警告 | 待用户决定 | loading 时 Form 未挂载就调用 `setFieldsValue`；字段显示正常，仅控制台警告 |
+| 代码/配置变更 | 无 | 本次只做运行与浏览器验收，未修改、未提交 |
+
+## 2026-11-01 会话 22：工作台聊天框首屏可见
+
+| 需求 | 状态 | 实现手段 |
+| --- | --- | --- |
+| 进入工作台即可看到聊天输入框 | 完成 | `AntdApp` 显式 `height:100%`；`.workspace` 改为 `flex:1` + `min-height:0` |
+| 页面不再整体纵向滚动 | 完成 | 根容器高度收敛到视口；聊天消息区与右侧参数区内部滚动 |
+| 布局回归验证 | 完成 | 2048×898/当前窗口下 `scrollHeight === innerHeight`，输入框贴底可见 |
+| 聊天功能回归 | 完成 | 选择会话后发送消息，SSE 200，消息正常追加 |
+| 构建与测试 | 完成 | `npm run build` 通过；`npm test` 4 passed |
+| 分支 | 已创建 | `fix/workspace-chat-visible`；未推送、未合并 |- 已确认范围：只做后端；重命名、软删除、消息状态、轻链路、上下文、需求摘要、需求变化提示、`agent_runs` 明细。
 - 明确不做：`POST /sessions`、会话恢复、取消接口、`agent_runs` 查询、消息搜索/导出、管理端聊天、聊天触发生图、真实内容审核；生图 `doubao-seedream-5-0-pro-260628` 属于 4 号，3 号不调用。
 - 环境：复用 docker `esimage-postgres`（55433）；8001 跑 3 号服务；chrome-devtools MCP 已验证 Swagger UI 与 OpenAPI。## 2026-10-31 会话 16：4 号生图任务与结果后端最小 demo（代码实现）
 

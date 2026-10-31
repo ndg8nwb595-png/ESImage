@@ -1336,3 +1336,56 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 - `backend/app/modules/generation/seed.py`：使用统一门面；切换 MinIO 后 seed 会把模板/素材上传到桶。
 - 删除 `backend/app/core/storage.py`；`backend/app/main.py` 清理重复导入。
 - `backend/README.md`：补充 MinIO 环境变量与对象存储说明。
+
+## 2026-11-01 会话 21：前后端联调（未改代码）
+
+### 代码/配置
+
+- 本次未修改任何源码、测试、配置或文档（仅更新五个 `.claude/MEMORY_*.md`）。
+- 未创建提交，未推送。
+
+### 启动与验证
+
+- `git pull`：`main` 从 `6c3adb5` 快进到 `22fa754`。
+- 后端（后台任务 `b7d18sifv`）：
+  `APP_ENV=test GENERATION_MODEL_PROVIDER=fake AGENT_RETRY_BACKOFF_SCALE=0 DATABASE_URL='postgresql+psycopg://esimage:esimage@127.0.0.1:55433/esimage_generation' python -m uvicorn app.main:app --host 127.0.0.1 --port 8010`
+  - `/api/health` 返回 200，`database/redis/minio` 均为 `ok`。
+  - 日志 `backend/logs/dev-backend.log` 无 ERROR/Traceback。
+- 前端（后台任务 `bn4yq73le`）：`npm run dev -- --host 127.0.0.1`，访问 `http://127.0.0.1:5173`。
+- MCP 用户端链路（demo_user）：登录 → 商品名/风格 → 聊天 SSE → 示例图 → 确认全套 → 6/6 结果 → 预览/单图下载 → 历史列表/详情 → ZIP，全部通过。
+- MCP 管理端链路（demo_super）：概览、账号、内容、聊天、素材、Agent 配置、审计、个人中心，全部可打开。
+- 历史列表旧图缩略图 404：ID 5/15/25/35/183/193/202/212；数据库 264 条缩略图路径中 76 条在 MinIO 不存在，均为切换 MinIO 前的旧种子数据。
+- `/profile` 控制台 `useForm` 未连接警告，定位到 `frontend/src/modules/profile/pages/ProfilePage.tsx:24`。
+
+### 验证结论
+
+- 本次代码路径（新生成的示例图/全套图、下载、ZIP、管理端查询）均正常。
+- 404 由本地历史种子对象缺失导致，非代码回归；如需修复需重新生成/上传旧种子对象或清理旧数据，待用户决定。
+
+## 2026-11-01 会话 22：工作台聊天框首屏可见（分支 `fix/workspace-chat-visible`）
+
+### 修改文件
+
+- `frontend/src/app/App.tsx`
+  - `<AntdApp>` 增加 `style={{ height: '100%' }}`，让 antd 的 `.ant-app` 包裹层占满 `#root`，使内部 `Layout` 的 `height:100%` 有确定参照。
+- `frontend/src/modules/workspace/workspace.css`
+  - `.workspace` 由 `height: 100%` 改为 `flex: 1`，保留 `min-height: 0`；作为 `Layout.Content`（flex 纵向容器）的子项占满剩余高度，不再被右侧内容撑高。
+
+### 根因
+
+- `AppLayout` 的 `<Layout style={{ height: '100%' }}>` 父级是 antd `App` 生成的 `.ant-app` div，其高度默认为 auto（实测 1733px），因此 `height:100%` 失效，页面被右侧参数/结果内容撑到 1733px；聊天输入框位于 1649px，需要滚动才能看到。
+
+### 验证
+
+- `git switch -c fix/workspace-chat-visible`（从 `main` 22fa754 创建）。
+- 2048×898 视口：修复前 `doc.scrollHeight=1733`、输入框 `top=1649`；修复后 `doc.scrollHeight=898`、内容区 842、输入框 `top=801/bottom=898`。
+- 当前窗口视口：`doc.scrollHeight === innerHeight`，聊天消息区与右侧栏各自 `overflow-y:auto`。
+- 选择会话“联调测试蓝牙耳机”后发送“布局修复后的联调测试消息”：`POST /api/v1/sessions/30/messages` 200，消息数 2→4，页面滚动高度保持不变。
+- `npm run build`：tsc 通过，Vite 构建成功（仅既有 chunk 体积提示）。
+- `npm test`：4 passed。
+- 控制台仅 React Router v7 future flag 警告，无 error。
+- 历史页、管理端概览页抽查：`doc.scrollHeight === innerHeight`，未因 App 高度改动产生回归。
+
+### 状态
+
+- 未推送、未合并 `main`；等待用户确认。

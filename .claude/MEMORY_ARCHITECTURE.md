@@ -432,3 +432,17 @@
 - 媒体响应统一 `workspace.service.media_response`（本地 FileResponse / MinIO 缓冲 Response）；归档件统一 `read_image_bytes`。
 - 测试强制 `STORAGE_BACKEND=local`；真实联调使用 `.env` 的 MinIO（9002）与桶 `esimage`。
 - `MODEL_CONFIG_ENCRYPTION_KEY`（或 `ENCRYPTION_KEY`）是主分支新增的启动必填项，本地 `.env` 必须配置。
+
+### 会话 21：本地联调环境（按现有配置执行）
+
+- 前端 Vite 固定 5173，开发代理 `/api` → `http://127.0.0.1:8010`；不要改用 8000（已被本机其他项目的 `dynamodb_local_jbs` 占用）。
+- 联调后端使用 `APP_ENV=test` + `GENERATION_MODEL_PROVIDER=fake`，不触发真实豆包计费；真实模式必须在 `APP_ENV` 非 test 时提供 `DOUBAO_API_KEY`/`ARK_API_KEY`。
+- 共享库 `esimage` 尚未执行 Alembic 0004（缺 `generated_images.client_request_id`），生图链路联调使用 `esimage_generation`；不要为联调擅自改共享库。
+- 数据库/Redis/MinIO 走 Docker；MinIO 宿主端口为 9002（API）/9003（控制台），桶 `esimage`。
+- 历史页旧种子记录可能指向 MinIO 中不存在的对象（早期本地存储遗留）；这属于环境数据问题，不应改为吞掉 404 或伪造文件。
+
+### 会话 22：全屏布局高度约定
+
+- antd `App` 的 `.ant-app` 包裹层必须显式 `height:100%`（在 `<AntdApp style={{ height: '100%' }}>` 上设置），否则 `#root` 的高度不会传导给内部 `Layout`，页面会被内容撑高。
+- 页面级三栏容器（如 `.workspace`）在 `Layout.Content` 内使用 `flex:1; min-height:0`，不要用 `height:100%`：父级为 flex 且高度由内容决定时，百分比高度会失效。
+- 需要“整页不滚动、内部面板滚动”的页面，滚动容器放在消息区/右侧栏等子面板上（`overflow-y:auto`），不要依赖整页滚动。
