@@ -825,7 +825,8 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 - 从 `main` 创建 `feat/history-backend-demo`。
 - 骨架提交 `4ea5d64 chore: 建立历史作品后端模块骨架`：新增 `backend/app/modules/history/README.md`；push 后 `git merge --ff-only` 到 `main` 并 push。
 - 业务实现提交 `afbdc18 feat: 实现历史作品后端最小 demo`。
-- 合并最新 `origin/main`（`6db0259`）解决冲突后，提交合并结果并推送功能分支。
+- 合并最新 `origin/main`（`6db0259`）解决冲突后提交 `a3320ab`；随后又合并 `df2f0a4`（部署与运维骨架 + Docker 基线）得到 `12ac8f6`。
+- 最终 `feat/history-backend-demo` 与 `main` 均已推送，远程 `main` 为 `12ac8f6`；合并后全量 `pytest` 93 passed，curl 验收通过。
 
 ### 新增文件
 
