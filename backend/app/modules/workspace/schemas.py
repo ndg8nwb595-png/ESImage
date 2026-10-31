@@ -20,6 +20,8 @@ class WorkspaceParams(BaseModel):
     width: int | None = None
     height: int | None = None
     template_id: int | None = None
+    # 3 号增量：聊天参数可携带上传图 ID，仅校验归属与数量，不分析图片内容
+    upload_ids: list[int] | None = None
 
 
 class ChatMessageRequest(BaseModel):

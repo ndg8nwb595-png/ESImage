@@ -243,3 +243,14 @@
 - 演示专用：`GET /api/v1/sessions/_probe/stream` 与 `ops.selftest`，仅非生产启用，已列入待确认。
 - 并发情况：10 号目录迁移与 `.claude/MEMORY_*` 已有并行会话改动；本次只追加 11 号内容与必要路径引用，未覆盖他人改动。
 - 未运行代码或测试；文档生成时未提交，随后提交到 `docs/deploy-ops-minimal-demo` 并合并 `main`；未创建 GitHub issue（tickets 为本地文件）。
+
+## 2026-10-31 会话 16：Agent 会话交互后端实现与豆包接入
+
+- 2 号 `feat/workspace-backend-demo` 已提交并合并 `main`（`115fb88`）；将 3 号骨架 rebase 到最新 main，解决五个记忆文档冲突（双方内容全部保留），推送 `feat/agent-chat-backend-demo` 并合并 main（`a28bfe2`）。
+- 基于 2 号 `modules/workspace/sessions.py` 实现 3 号增量：PATCH 重命名、DELETE 软删除、消息惰性超时、`meta.duplicate`、`done.requirement_changed`、10 轮上下文、上传图校验、`agent_runs` 双 Agent 明细；新增 `modules/chat/` 的 router/schemas/service/agents/model/stream。
+- 用户提供火山方舟接入方式与 `ARK_API_KEY`（已写入 `backend/.env`，不提交）。实现真实豆包文本模型：规划 Agent 非流式、商品理解 Agent 流式 + `<<<SUMMARY>>>` 摘要 JSON；Token 取 usage；无 Key 或测试时走演示桩（conftest 强制 `CHAT_USE_STUB=1`）。
+- 真实豆包验证 4 次：约 3~4 秒返回；Token 419/119、521/160、513/175 等；摘要正确提取类目、卖点、目标人群、场景、语气、限制；有风格时确认需求并追问场景，无风格时列出 4 个风格建议；提示词已禁止“我会直接为你生图”。
+- 用户补充：生图模型为 `doubao-seedream-5-0-pro-260628`，与生文共用 `ARK_API_KEY`；该能力属于 4 号，3 号只在 `.env.example` 记录模型名，不调用。
+- 代码审查后修复：失败重试刷新 `created_at`、按“下一条用户消息”定位回复、首条消息只查 active 会话、重放返回保存时摘要、模型调用移入 SSE 流内、测试库隔离为 `esimage_chat_test`。
+- 验证：全量 `pytest` **85 passed**；curl 真实服务 6 个接口通过，含重命名校验、软删除、隐藏/他人 30013、管理员 403、上传图 30006；Swagger UI 已用 chrome-devtools 打开，OpenAPI 含 6 个会话接口。
+- 待完成：提交业务代码到 `feat/agent-chat-backend-demo`，推送并合并 main；清理 `.smoke/` 临时文件。

@@ -265,3 +265,17 @@
 - **演示专用接口/任务**：`GET /api/v1/sessions/_probe/stream`（验证 Nginx 不缓冲）与 `ops.selftest`（验证 Worker 与 `request_id` 透传），仅 `APP_ENV != production` 启用，生产 404/不注册；是否长期保留待确认。
 - **契约口径**：只有 nginx 暴露 80；`client_max_body_size 12m`；API 读超时 300s；SSE 关闭缓冲/缓存并清空 `Connection`；安全头使用 `always`；`X-Request-ID` 复用或生成 UUIDv4；日志 JSON 按天轮转 90 份压缩；备份保留 7 天。
 - **待统一项**：README §6 与接口文档 §10 的 14 项，重点是双健康接口差异、健康接口鉴权、`X-Request-ID` 头名、失败值/超时、安全头取值、初始密码规则、演示专用接口、413 响应体、恢复覆盖语义、Nginx 日志轮转、MinIO 前缀、空调度、stdout 保留。
+
+- **模块位置**：3 号后端统一放在 `backend/app/modules/chat/`，不改动 `modules/auth/` 内部实现；会话/消息/AgentRun 表复用 2 号 `app/models/workspace.py`，不重复建表。
+- **复用 2 号基线**：会话列表、首条消息建会话、SSE 骨架、自动命名、幂等由 2 号 demo 04 提供；3 号增加重命名、软删除、惰性超时、`meta.duplicate`、`done.requirement_changed`、10 轮上下文、上传图校验与 `agent_runs` 明细。
+- **合并节奏**：骨架先提交并推送 `feat/agent-chat-backend-demo`，`--ff-only` 合并 `main`；业务代码在功能分支开发，验证后再合并。2 号 demo 04 合并 main 后才开始 3 号实现。
+- **真实模型**：
+  - 文本模型走火山方舟 OpenAI 兼容接口：`ARK_API_KEY`、`ARK_BASE_URL` 默认 `https://ark.cn-beijing.volces.com/api/v3`、`ARK_TEXT_MODEL` 默认 `doubao-seed-character-260628`。
+  - 规划 Agent 非流式、商品理解 Agent 流式；流式正文结束后用 `<<<SUMMARY>>>` 哨兵 + 摘要 JSON，哨兵与 JSON 不下发前端。
+  - Token 取接口 usage；助手消息与 done 事件记两个 Agent 合计；`agent_runs` 分 Agent 记 Token、模型名、耗时。
+  - `ARK_API_KEY` 为空或 `CHAT_USE_STUB=true` 时使用确定性演示桩，Token 记 0；测试由 `tests/conftest.py` 强制 `CHAT_USE_STUB=1`。
+  - 生图模型 `doubao-seedream-5-0-pro-260628` 与生文共用同一 Key，但属于 4 号 PRD，3 号不调用。
+- **调用时序**：模型调用放在 SSE 流内、`workspace_lock` 之外；`meta → planner started/finished → product started → delta → finished → done` 与实际调用一致；15 秒心跳由 `stream.py` 包装。
+- **边界修复（代码审查后）**：失败重试刷新 `created_at`，避免被超时规则立即标记；按“下一条用户消息”定位回复，避免重试覆盖后一条消息；首条消息去重只查 active 会话；重放 done 返回该条回复保存时的摘要；测试库改用 `esimage_chat_test` 隔离并行 agent。
+- **环境**：复用 `esimage-postgres`（55433）；8000 被 1 号登录 demo 占用，3 号联调用 8001；chrome-devtools MCP 已用于 Swagger UI 验证。
+- **已知 demo 边界**：参数校验先于幂等重放（已删除上传图的极端重试会返回 30006）；真实模型措辞需联调抽检；接口不返回 usage 时 Token 记 0。

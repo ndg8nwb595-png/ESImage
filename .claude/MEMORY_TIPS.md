@@ -129,3 +129,12 @@
 - **移动 PRD 后按文件所在层级校验引用**：顶层 0 号用 `11-部署与运维/...`，文件夹内文档用 `./` 或 `../`；同名字符串在不同层级对错不同，不能只 grep 旧名。
 - **部署 demo 的“接口文档”要包含非 HTTP 契约**：健康探针只是其一，Compose 服务/端口/卷、脚本 CLI 参数与退出码、cron/Celery 调度、日志字段与 `request_id` 同样是与运维的接口，缺少会无法验收。
 - **演示专用接口必须带环境开关并写明**：SSE 探针与 `ops.selftest` 不在 PRD 中，需仅非生产启用、生产 404/不注册，并在 README 与接口文档的待确认项中标注，避免被当成正式接口。
+
+- **豆包接入用 OpenAI 兼容 SDK**：`OpenAI(base_url="https://ark.cn-beijing.volces.com/api/v3", api_key=os.getenv("ARK_API_KEY"))`；文本用 `chat.completions.create`，生图用 `images.generate(model="doubao-seedream-5-0-pro-260628")`。生文与生图共用同一个 Key，但属于不同 PRD 模块，不要混在一个接口里。
+- **流式输出要区分“正文”和“结构化结果”**：本次用 `<<<SUMMARY>>>` 哨兵把用户正文与需求摘要 JSON 分开；正文实时下发，哨兵后的内容缓冲解析，不把哨兵/JSON 发给前端。哨兵可能被拆到多个 chunk，必须保留 `len(哨兵)-1` 个字符再判断。
+- **流式 usage 需要 `stream_options={"include_usage": True}`**：火山方舟实测支持，最后一个 chunk 带 `usage`；不支持时捕获后重试不带该参数，Token 记 0。
+- **模型看不到参数就会“失忆”**：只把 `messages` 传给模型时，商品名称/风格/摘要不在对话里，模型会反问“请提供商品信息”。必须额外注入一条 system 消息，包含当前参数、需求摘要与已确认示例描述。
+- **测试不能读开发者的真实 Key**：conftest 在导入 app 前 `os.environ.setdefault("CHAT_USE_STUB", "1")`；真实模型路径用假 OpenAI 客户端单测，避免测试产生费用。
+- **并行 agent 的测试库要隔离**：同设备多个克隆共用 55433 PostgreSQL 时，测试库默认名相同会互相清表；本仓库改用 `esimage_chat_test`，并用 `TEST_DB_NAME` 可覆盖。
+- **模型调用不要放在进程锁里**：真实模型时延会把所有工作台写操作串行化；本次把规划/商品理解调用放进 SSE 流内，锁只覆盖会话/用户消息/回复占位的创建。
+- **中文 JSON 在 Windows Git Bash 下用 `--data-binary @文件`**：Python 写 UTF-8 文件时不要用 `/tmp` 绝对路径（Python 与 Git Bash 的 `/tmp` 映射不同），用仓库内相对目录或 `$TEMP`。

@@ -246,16 +246,22 @@
 | 独立审查 | 完成 | 只读审查 agent 发现并发幂等、OOM 边界、SSE 断线、校验文案等问题；已修复并复测 |
 | 提交与合并 | 完成 | 提交 `7595e31 feat: 实现创作工作台后端最小 demo 与 curl 验收`；推送功能分支并 `--ff-only` 合并到 `main`，远程 `main` 已更新 |
 
-## 2026-10-31 会话 15：Agent 会话交互后端实现（前置等待中）
+## 2026-10-31 会话 15：Agent 会话交互后端实现
 
 | 需求 | 状态 | 实现手段 |
 | --- | --- | --- |
-| 新建开发分支 | 完成 | `feat/agent-chat-backend-demo`，基于 `main` `e6a971b` |
-| 建立 chat 模块文件夹骨架 | 完成 | `backend/app/modules/chat/README.md`，记录定位、依赖、6 个计划接口与文件职责 |
-| 骨架推送功能分支 | 阻塞 | `github.com:443` 连接超时；本地提交 `19428da` 已完成 |
-| 骨架合并 main | 完成（本地） | `git merge --ff-only feat/agent-chat-backend-demo`，main 前进到 `19428da`；推送待网络恢复 |
-| 6 个接口业务实现 | 等待前置 | 依赖 2 号 demo 04；用户选择等 `feat/workspace-backend-demo` 合并 main 后再开发 |
-| curl 联调验证 | 未开始 | 待业务实现后执行 |
+| 新建开发分支与骨架 | 完成 | `feat/agent-chat-backend-demo`；骨架提交 `19428da` 已推送并 `--ff-only` 合并 `main`；2 号 demo 04 合并后 rebase 到 `115fb88` |
+| chat 模块 | 完成 | `router.py`、`schemas.py`、`service.py`、`agents.py`、`model.py`、`stream.py`、`README.md` |
+| PATCH 会话重命名 | 完成 | 去首尾空格 1~50 字；纯空格 10002、超长 10004、类型/换行 10003；不改消息/批次/摘要/last_message_at |
+| DELETE 会话软删除 | 完成 | `status=hidden`；消息/批次/图片/上传图保留；重复删除 30013；用户列表立即隐藏 |
+| 消息分页惰性超时 | 完成 | `sending` 超过 120 秒的 Agent 消息在查询时标记 `failed`；用户消息不参与 |
+| 聊天 SSE 增量 | 完成 | `meta.duplicate`、`done.requirement_changed`、10 轮上下文与省略说明、`params.upload_ids` 校验、`agent_runs` 双 Agent 明细 |
+| 豆包真实模型 | 完成 | OpenAI SDK + `ARK_API_KEY`；规划非流式、商品理解流式 + `<<<SUMMARY>>>` 摘要；Token 取 usage；无 Key/测试走演示桩 |
+| 会话列表摘要清洗 | 完成 | `last_message_preview` 去换行/首尾空格后截取 30 字 |
+| 测试 | 完成 | `tests/test_chat.py` + `tests/test_chat_model.py`（假客户端）；全量 `pytest` 85 passed |
+| curl 联调 | 完成 | 6 个接口 + 真实豆包对话；PATCH/DELETE/隐藏 30013/管理员 403/他人会话 30013 全通过 |
+| 独立审查 | 完成 | 修复重试时间戳、回复归属、隐藏会话重放、重放摘要、测试库隔离等 |
+| 提交与合并 | 待完成 | 业务代码尚未 commit/push/merge；下一步执行 |
 
 - 已确认范围：只做后端；`PATCH/DELETE /sessions/{id}`、消息分页惰性超时、聊天 SSE 的 `meta.duplicate` 与 `done.requirement_changed`、轻链路与 10 轮上下文、`agent_runs` 落库、需求变化判定。
 - 明确不做：`POST /sessions`、会话恢复、取消接口、`agent_runs` 查询、消息搜索/导出、管理端聊天、聊天触发生图、真实内容审核与 Token 计费。
@@ -288,3 +294,7 @@
 - 不做：5 年归档、孤儿上传清理、导出清理、权限缓存刷新、审计业务写入、HTTPS/443、MinIO 控制台、Prometheus/Grafana、多机/灰度/容灾、业务页面与业务接口、真实生成链路。
 - 用户确认的取舍：8 个切片；只起 Worker/Beat、不做归档；健康接口双路径；PRD 移动并更新引用。
 - 演示专用：`GET /api/v1/sessions/_probe/stream` 与 `ops.selftest`，仅非生产启用，待正式确认是否保留。
+
+- 已确认范围：只做后端；重命名、软删除、消息状态、轻链路、上下文、需求摘要、需求变化提示、`agent_runs` 明细。
+- 明确不做：`POST /sessions`、会话恢复、取消接口、`agent_runs` 查询、消息搜索/导出、管理端聊天、聊天触发生图、真实内容审核；生图 `doubao-seedream-5-0-pro-260628` 属于 4 号，3 号不调用。
+- 环境：复用 docker `esimage-postgres`（55433）；8001 跑 3 号服务；chrome-devtools MCP 已验证 Swagger UI 与 OpenAPI。
