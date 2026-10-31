@@ -2,7 +2,10 @@
 
 .workspace {
   display: flex;
-  height: 100%;
+  /* 作为 Layout.Content（flex 纵向容器）的子项占满剩余高度。
+     不能用 height: 100%：父级高度由内容撑开时百分比高度无确定参照，
+     会被右侧内容撑到整页高度，导致聊天输入框被挤出首屏。 */
+  flex: 1;
   min-height: 0;
   width: 100%;
 }

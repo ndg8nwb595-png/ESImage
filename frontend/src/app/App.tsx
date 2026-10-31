@@ -41,7 +41,11 @@ export default function App() {
 
   return (
     <ConfigProvider locale={zhCN} theme={themeConfig}>
-      <AntdApp>{initialized ? <RouterProvider router={router} /> : <FullScreenLoading />}</AntdApp>
+      {/* AntdApp 默认渲染一个高度自适应的 div；显式撑满 100%，
+          否则内部 Layout 的 height:100% 没有确定参照，会被内容撑高。 */}
+      <AntdApp style={{ height: '100%' }}>
+        {initialized ? <RouterProvider router={router} /> : <FullScreenLoading />}
+      </AntdApp>
     </ConfigProvider>
   )
 }
