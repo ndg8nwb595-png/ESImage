@@ -145,7 +145,7 @@
 | GET | `/api/v1/admin/content/sessions/{session_id}/batches` | `admin.content.view` | 会话批次列表 | 04 |
 | GET | `/api/v1/admin/content/batches/{batch_id}/images` | `admin.content.view` | 批次图片列表 | 04 |
 | GET | `/api/v1/admin/content/images/{image_id}` | `admin.content.view` | 单图详情 | 05 |
-| GET | `/api/v1/admin/content/images/{image_id}/thumbnail` | `admin.content.view` | 图片网格缩略图 | 04 / 05 |
+| GET | `/api/v1/admin/content/images/{image_id}/thumbnail` | `admin.content.view` | 图片网格缩略图 | 04 |
 | GET | `/api/v1/admin/content/images/{image_id}/content` | `admin.content.view` | 单图大图预览 | 05 |
 | GET | `/api/v1/admin/content/images/{image_id}/download` | `admin.content.view` | 下载单张原图 | 05 |
 | GET | `/api/v1/admin/users` | `admin.accounts.view` | 用户列表；统计改为真实值（复用 6 号） | 06 |
@@ -164,26 +164,24 @@
 ## 4. 任务依赖
 
 ```text
-6 号 demo 01（管理后台骨架、权限点、用户列表）
-        │
-4 号 demo 01（生成数据模型与 Agent 运行时）
-        ↓
-01 概览四卡与演示数据种子
-        ├──────────────────────────┐
-        ↓                          ↓
-02 Token 统计 Tab         03 生图记录：用户层与会话层
-                                   ↓
+[6 号 demo 01] ─┐
+                ├─→ 01 概览四卡与演示数据种子
+[4 号 demo 01] ─┘
+                      │
+          ┌───────────┴───────────┐
+          ↓                       ↓
+   02 Token 统计 Tab       03 生图记录：用户层与会话层
+                                  ↓
                           04 生图记录：批次层与图片网格
-                                   ↓
+                                  ↓
                           05 单图详情与媒体访问
-                                   │
-                    ┌──────────────┘
-                    ↓
-              （03 → 06，见下）
-06 用户详情真实统计与内容入口
+
+[6 号 demo 06] ─┐
+[03]           ─┼─→ 06 用户详情真实统计与内容入口
+[4 号 demo 01] ─┘
 ```
 
-> 02 与 03~05 在 01 完成后可并行；06 依赖 03 的 `user_id` 筛选入口与 6 号 demo 06 的用户详情；05 的归档读取可复用 5 号 demo 05。
+> 02 与 03~05 在 01 完成后可并行；06 只依赖 03 的三栏与用户列表骨架（`user_id` 定位在 06 内补）、6 号 demo 06 的用户详情与 4 号 demo 01 的生成数据模型，不依赖 04/05；05 的归档读取可复用 5 号 demo 05。
 
 | # | Ticket | 阻塞于 | 交付的可演示行为 |
 | --- | --- | --- | --- |
@@ -225,7 +223,7 @@
 3. **图片网格默认是否展示 `superseded` 旧图**：demo 默认每个序号只展示最新尝试，提供 `include_superseded=true` 与 `status=superseded` 查看全部；PRD 只要求状态筛选包含 superseded。
 4. **`agent_runs` 的用户归属**：demo 优先取 `creative_sessions.user_id`，其次 `generation_batches.user_id`；两者都为空的记录不计入按用户明细。需 4 号运行时保证每次调用至少关联会话或批次。
 5. **Token 统计的失败调用口径**：demo 只计入 `success`，以及 `failed` 且输入+输出 Token > 0 的记录；`failed` 且 0 Token 不计入。
-6. **新增错误码 `30020`（图片不存在）**：9 号未定义；demo 暂用 `30020`，与 6 号 demo 的 `30017`~`30019` 连续。
+6. **新增错误码 `30024`（图片不存在）**：9 号未定义；demo 暂用 `30024`，避开 6 号 demo 的 `30017`~`30019` 与 8 号 demo 的 `30020`~`30023`。
 7. **新增管理端媒体接口**：`/thumbnail`、`/content` 在 9 号只有 `/download`；demo 新增，需与 9 号统一。
 8. **管理员下载文件名**：demo 复用用户端 `{商品名称}_{主图|详情图}_{序号}_{yyyyMMddHHmmss}.png`；PRD 未单独定义后台命名。
 9. **归档读取复用**：demo 复用 5 号 demo 05 的 `archived_at` + `archive/` 规则与 `30014`；正式实现需统一超时阈值与错误文案。
