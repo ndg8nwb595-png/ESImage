@@ -92,6 +92,8 @@ DEMO_USERS: list[tuple[str, str, list[str]]] = [
     ("demo_user", "演示用户", ["user"]),
     ("demo_admin", "演示管理员", ["admin"]),
     ("demo_dual", "双角色演示", ["user", "admin"]),
+    # 8 号聊天记录 / 模型配置演示账号
+    ("demo_super", "演示超管", ["super_admin"]),
 ]
 
 

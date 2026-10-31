@@ -161,3 +161,13 @@
 - **并行 agent 的测试库要隔离**：同设备多个克隆共用 55433 PostgreSQL 时，测试库默认名相同会互相清表；本仓库改用 `esimage_chat_test`，并用 `TEST_DB_NAME` 可覆盖。
 - **模型调用不要放在进程锁里**：真实模型时延会把所有工作台写操作串行化；本次把规划/商品理解调用放进 SSE 流内，锁只覆盖会话/用户消息/回复占位的创建。
 - **中文 JSON 在 Windows Git Bash 下用 `--data-binary @文件`**：Python 写 UTF-8 文件时不要用 `/tmp` 绝对路径（Python 与 Git Bash 的 `/tmp` 映射不同），用仓库内相对目录或 `$TEMP`。
+- **管理后台路由漏了 `/admin` 前缀**：`admin/router.py` 若只是 `APIRouter()`，子路由会注册成 `/api/v1/chat/*`、`/api/v1/prompts/*`；必须 `APIRouter(prefix="/admin")`。用 `app.openapi()["paths"]` 快速核对真实路径。
+- **管道里 Python 解析含中文的 JSON 要设 `PYTHONIOENCODING=utf-8`**：Windows 下不设会把 UTF-8 输入按本地编码解码，`json.load` 报 `Expecting property name enclosed in double quotes`，raw 响应本身是合法的。
+- **curl 发送中文 JSON 不要用 `-d '中文'`**：Git Bash 可能按本地编码传字节，FastAPI 返回 `{"detail":"There was an error parsing the body"}`；先用 Python 写 UTF-8 文件，再 `--data-binary @file`。
+- **共享库种子按 `(user_id,title)` 幂等会“跳过”旧的同名测试会话**：如果旧会话已存在但数据不完整，种子不会补齐；验证标准夹具优先用独立测试库（`esimage_chat_test`），不要直接改共享行（会被权限策略拒绝）。
+- **严格启动校验要同步测试环境**：新增 `MODEL_CONFIG_ENCRYPTION_KEY` 等必填环境变量后，`conftest.py` 必须在导入 `app.*` 前 `setdefault`，否则所有测试在收集阶段就失败；脚本 `init_db.py`/`seed.py` 也要显式带环境变量。
+- **迁移接口到新路由后必须删旧注册**：同一路径若在两个 router 都存在，FastAPI 按注册顺序取第一个，旧实现会“悄悄赢”；迁移时直接删除旧路由段，不要只新增。
+- **`with_for_update()` 只锁已存在的行**：模型配置“无启用行时插入”无法靠行锁防并发，演示环境可接受；正式实现需要唯一索引 + 捕获冲突重试。
+- **`around_id` 的补齐口径要用“实际取到的更早条数”**：接口文档 §4.2 步骤 3 是 `limit - 1 - 已取更早条数`，不是固定 `floor((limit-1)/2)`；否则锚点靠前时会少于 `limit`，且前端没有加载更新消息的游标。
+- **AESGCM.decrypt 密钥不匹配抛 `InvalidTag`**：它不继承 `ValueError`；解密封装必须显式捕获，否则会漏到全局 500 而不是业务加密错误。
+- **种子补历史版本要防止伪造**：当前版本 > 1 且缺少 v1 时，不要用当前内容补 v1；只在 `current_version <= 1` 时补写。

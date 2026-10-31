@@ -946,3 +946,44 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 - 提交前 rebase 到最新 `origin/main` `4ea5d64`（生图/历史/部署骨架），解决五个记忆文档冲突（双方内容全部保留）；rebase 后全量 `pytest` **85 passed**。
 - 推送 `feat/agent-chat-backend-demo`，`--ff-only` 合并 `main` 并推送 `4ea5d64..6e0c96c`，远程 `main` 已更新。
 - `.smoke/` 为临时 curl 产物，已删除并加入 `.gitignore`；`backend/.env` 含真实 Key，已被 `.gitignore` 忽略，禁止提交。
+
+## 2026-10-31 会话 17：8 号管理后台-聊天记录后端实现
+
+### 新增文件
+
+- `backend/app/modules/admin/chat_records/router.py`：4 个聊天记录接口（列表/详情/搜索/Agent 明细）。
+- `backend/app/modules/admin/chat_records/service.py`：可见范围、ILIKE 转义、批量会话摘要、日期区间、摘要截断。
+- `backend/app/modules/admin/chat_records/seed.py`：4 会话幂等夹具（12/6/4/2 消息，success/failed/skipped，sample/full 批次）。
+- `backend/app/core/crypto.py`：AES-256-GCM 加解密、`sk-****abcd` 脱敏。
+- `backend/tests/test_admin_chat_records.py`：7 个端到端测试用例。
+- `.smoke/curl_module8.sh`：逐接口 curl 冒烟脚本（`.smoke/` 已被 gitignore）。
+
+### 修改文件
+
+- `backend/app/modules/admin/content/router.py`：移除聊天记录段落，仅保留内容追溯；清理无用导入。
+- `backend/app/modules/admin/prompts/router.py`：按接口文档重写模型配置与 8 Agent 提示词/版本/回滚/变量告警/审计。
+- `backend/app/modules/admin/router.py`：显式导入子模块 `router`；新增 `prefix="/admin"`，修复管理后台全部接口缺少前缀的问题。
+- `backend/app/core/config.py`：新增 `MODEL_CONFIG_ENCRYPTION_KEY` 的 base64/32 字节启动校验。
+- `backend/app/core/audit.py`：`write_audit` 新增可选 `target_type` / `target_id`，向后兼容。
+- `backend/app/modules/admin/seed.py`：提示词补版本 1、新增默认模型配置（幂等）。
+- `backend/app/modules/auth/seed.py`：新增 `demo_super`（super_admin，密码 Demo1234）。
+- `backend/scripts/seed.py`：接入 `seed_chat_records`。
+- `backend/tests/conftest.py`：注入测试加密密钥；会话级种子加入 `seed_config` + `seed_chat_records`。
+- `backend/requirements.txt`、`backend/.env.example`：新增 `cryptography` 与密钥示例。
+
+### 验证
+
+- `python -m pytest tests/test_admin_chat_records.py -q`：**7 passed**。
+- 全量 `python -m pytest -q`：**139 passed, 3 failed**；失败均为 `test_ops.py` 环境缺少 `celery` 的既有问题。
+- 启动校验：缺少 `MODEL_CONFIG_ENCRYPTION_KEY` 与 3 字节密钥均抛 `RuntimeError`。
+- curl（`127.0.0.1:8010`，共享 `esimage-postgres` 55433）：会话列表/详情/Agent 明细/搜索/模型配置/提示词/回滚/审计/普通用户 403 全部通过。
+- 共享库遗留：旧「秋季通勤衬衫」会话（id=1，hidden，2 消息）导致种子按 `(user_id,title)` 跳过；标准 12 消息夹具在独立测试库验证通过。尝试重命名旧会话被权限策略拒绝，未修改共享数据。
+
+### 独立代码审查与修复
+
+- 审查结论：**无阻断问题**；管理员/超管可见范围、ILIKE 转义、AES-GCM 明文边界、提示词行锁均未发现越权或明文泄露。
+- 修复 `around_id` 窗口：`newer_count` 改为 `limit - 1 - len(older)`，锚点靠前时用实际更早条数补齐，达到 `limit`；新增断言覆盖。
+- 修复 `status=""`：按接口文档“空字符串按未提供处理”，等价 `all`。
+- 修复提示词版本 1 补写：仅当 `current_version <= 1` 时补写，避免旧库升级时伪造历史；`created_by` 记为 `demo_super`。
+- 修复 `decrypt_api_key`：捕获 `cryptography.exceptions.InvalidTag`，统一转为 `ModelConfigCryptoError`。
+- 修复后：`tests/test_admin_chat_records.py` **7 passed**；curl 冒烟再次全部通过。

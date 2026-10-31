@@ -29,6 +29,8 @@ def write_audit(
     action: str,
     result: str,
     detail: dict[str, Any] | None = None,
+    target_type: str | None = None,
+    target_id: str | None = None,
 ) -> None:
     """写一条审计日志；不包含密码、JWT 等敏感信息。"""
     db.add(
@@ -36,6 +38,8 @@ def write_audit(
             user_id=user_id,
             username_snapshot=username_snapshot,
             action=action,
+            target_type=target_type,
+            target_id=target_id,
             result=result,
             ip=_client_ip(request),
             user_agent=request.headers.get("user-agent"),

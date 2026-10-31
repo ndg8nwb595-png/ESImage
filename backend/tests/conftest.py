@@ -25,6 +25,11 @@ ADMIN_DATABASE_URL = (
 
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ.setdefault("JWT_SECRET", "test-only-secret-esimage-0123456789abcdef")
+# 8 号模型配置加密：测试使用固定的 base64 32 字节密钥
+os.environ.setdefault(
+    "MODEL_CONFIG_ENCRYPTION_KEY",
+    "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
+)
 # 测试默认使用确定性演示桩，避免读取开发者 .env 中的 ARK_API_KEY 产生真实调用
 os.environ.setdefault("CHAT_USE_STUB", "1")
 # 测试时不等待演示管线阶段停顿，并把本地存储放到独立的测试目录
@@ -61,6 +66,8 @@ def prepared_database():
 
     from app import models  # noqa: F401  注册模型
     from app.core.database import Base, SessionLocal, engine
+    from app.modules.admin.chat_records.seed import seed_chat_records
+    from app.modules.admin.seed import seed_config
     from app.modules.auth.seed import seed
 
     print("[测试] 重建测试表结构……")
@@ -68,6 +75,9 @@ def prepared_database():
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         seed(db)
+        # 8 号：8 个 Agent 提示词、版本 1、默认模型配置与会话夹具
+        seed_config(db)
+        seed_chat_records(db)
     print("[测试] 测试数据库就绪。")
     yield
 
