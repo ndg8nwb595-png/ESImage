@@ -45,6 +45,31 @@ class Settings:
             os.getenv("ARCHIVE_READ_TIMEOUT_SECONDS", "60")
         )
 
+        # 3 号 Agent 会话交互：消息超时阈值、上下文轮数与 SSE 心跳间隔
+        self.CHAT_MESSAGE_TIMEOUT_SECONDS = int(
+            os.getenv("CHAT_MESSAGE_TIMEOUT_SECONDS", "120")
+        )
+        self.CHAT_CONTEXT_ROUNDS = int(os.getenv("CHAT_CONTEXT_ROUNDS", "10"))
+        self.SSE_HEARTBEAT_SECONDS = float(os.getenv("SSE_HEARTBEAT_SECONDS", "15"))
+
+        # 豆包（火山方舟）文本模型；未配置 API Key 或显式开启演示桩时走确定性桩
+        self.ARK_API_KEY: str = os.getenv("ARK_API_KEY", "") or os.getenv(
+            "DOUBAO_API_KEY", ""
+        )
+        self.ARK_BASE_URL: str = os.getenv(
+            "ARK_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"
+        )
+        self.ARK_TEXT_MODEL: str = os.getenv(
+            "ARK_TEXT_MODEL", "doubao-seed-character-260628"
+        )
+        self.ARK_TIMEOUT_SECONDS: float = float(os.getenv("ARK_TIMEOUT_SECONDS", "60"))
+        self.CHAT_USE_STUB: bool = os.getenv("CHAT_USE_STUB", "false").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+
         if not self.JWT_SECRET:
             raise RuntimeError(
                 "缺少 JWT_SECRET 环境变量。请复制 backend/.env.example 为 backend/.env 并设置随机密钥。"

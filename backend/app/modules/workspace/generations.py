@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.deps import AuthContext
+from app.core.deps import AuthContext, require_any_permission
 from app.core.response import ApiError, ok
 from app.models.workspace import CreativeSession, GeneratedImage, GenerationBatch, UploadedAsset
 from app.modules.workspace.pipeline import run_full_pipeline, run_sample_pipeline
@@ -23,7 +23,6 @@ from app.modules.workspace.service import (
     image_thumbnail_url,
     now_utc,
     read_image_bytes,
-    require_any_permission,
     require_permission,
     session_title_from_product,
     to_iso,
@@ -417,7 +416,7 @@ def get_image_content(
 ) -> Response:
     """大图预览：示例图与正式图都可读，下载权限由下载接口单独控制。
 
-    归档图片（`archived_at` 非空）从 `archive/` 读取；读取慢/不可用时按 5 号文案返回。
+    归档图片（`archived_at` 非空）从 `archive/` 读取并受超时约束。
     """
     image = _get_owned_image(db, auth.user.id, image_id)
     if image.archived_at is not None:
@@ -477,6 +476,7 @@ def download_image(
     """下载正式图 PNG；示例图确认前、失败图、取消半成品不可下载。"""
     image = _get_owned_image(db, auth.user.id, image_id)
 
+    # 示例图文案沿用 2 号 demo，避免破坏已有调用与测试
     if image.image_type == "sample":
         raise ApiError(409, 30005, "示例图确认前不可下载")
     if (

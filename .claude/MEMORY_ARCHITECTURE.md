@@ -235,6 +235,8 @@
 
 ## Agent 会话交互后端实现约定（2026-10-31 用户确认）
 
+## 3 号 Agent 会话交互后端实现约定（2026-10-31）
+
 - **模块位置**：3 号后端统一放在 `backend/app/modules/chat/`，不改动 `modules/auth/` 内部实现。
 - **前置依赖**：3 号 demo 只做 2 号 demo 04 的增量；会话列表、首条消息建会话、SSE 骨架、自动命名、幂等由 2 号 `feat/workspace-backend-demo` 提供。
 - **当前阻塞**：`main` 尚无 2 号 demo 04 的可运行代码（2 号 agent 的 `workspace/sessions.py` 等仍为同设备另一工作区的未提交改动）。用户选择「等 2 号合并后再做」，不复制、不触碰对方未提交代码。
@@ -270,9 +272,9 @@
 
 - **目录与职责**：`backend/app/modules/history/` 放 `router.py`（列表/详情/ZIP）、`service.py`（可见性/分页/序列化）、`zip_export.py`（ZIP+manifest）、`seed.py`（夹具）；路由在 `main.py` 统一挂载，不修改 auth/workspace 路由结构。
 - **复用而非重写**：单张预览与下载继续用 2 号 workspace 的 `/images/{id}/content`、`/download`；历史模块只补权限放宽、`full + final` 校验、归档读取与更严格文件名规则。ZIP 实现集中在 history `zip_export.build_batch_zip`，4 号 demo 08 接入时调用同一函数。
-- **权限**：列表/详情/单张下载/整组 ZIP 用 `user.history`；预览与缩略图接受 `user.history` 或 `user.generate`。新增 `workspace.service.require_any_permission`，保持 2 号已有 `user.generate` 调用不断。
+- **权限**：列表/详情/单张下载/整组 ZIP 用 `user.history`；预览与缩略图接受 `user.history` 或 `user.generate`。`app/core/deps.py` 提供 `require_permission` / `require_any_permission`，`workspace.service` 重新导出以兼容 2 号已有调用。
 - **越权口径**：历史聚合接口按 5 号返回 403/20005；媒体接口仍按 2 号“不泄露存在性”返回 404/30014。该差异保留为待统一项。
-- **归档**：`archived_at` 非空时原件路径为 `archive/{file_path}`，缩略图始终读热存 `thumbnail_path`；`ARCHIVE_READ_TIMEOUT_SECONDS` 默认 60；归档缺失/超时/存储异常统一 404/30014「文件归档中，请稍后重试」并写 `esimage.history` 错误日志（image_id/batch_id/archive_path/reason）。
+- **归档**：`archived_at` 非空时原件路径为 `archive/{file_path}`，缩略图始终读热存 `thumbnail_path`；`ARCHIVE_READ_TIMEOUT_SECONDS` 默认 60；归档缺失/超时/存储异常统一 404/30014「文件归档中，请稍后重试」并写 `esimage.storage` 错误日志（image_id/batch_id/archive_path/reason）。
 - **ZIP 契约**：仅 `full` 且 `completed`/`partially_failed`；按 `index_no` 1..total_count 取 `attempt_no` 最大、非 `superseded` 的记录；manifest UTF-8 BOM、中文表头、`success`/`failed`、失败原因；任一成功图不可读则整体失败，不返回残缺包；构建到 `SpooledTemporaryFile` 后分块流式输出。
 - **文件名**：`{商品名称}_{主图|详情图}_{序号}_{yyyyMMddHHmmss}.png`；商品名称非法字符、控制字符、结尾点/空格替换为下划线；时间戳取图片 `created_at`，ZIP 名取批次 `created_at`，均按 Asia/Shanghai。
 - **种子口径**：demo_user 21 个历史可见批次（18 completed + 1 含 superseded + 1 归档 + 1 partial），另 1 个示例批次与 1 个失败批次不进历史；demo_dual 另有 1 个全套批次用于跨用户 403，不进入 demo_user 列表；重复执行按 `client_request_id=seed-history-*` 跳过。
@@ -285,5 +287,21 @@
   1. 种子计数与文档“21 个 completed + 1 partial”不一致，当前以接口验收 `total=21` 为准。
   2. manifest 的「宽度/高度」分列与 4 号「尺寸」单列冲突，需与 4 号 demo 08 统一。
   3. 示例图下载 409 文案沿用 2 号「示例图确认前不可下载」，5 号 §8.4 写「当前图片不可下载」；为保护 2 号已有调用暂未改。
-  4. 归档读取与双权限工具暂放 `workspace/service.py`，history 反向 import；若后续 chat/generation 也复用，需确认是否上移到 `app/core`。
+  4. 归档读取与文件名工具暂放 `workspace/service.py`（history 反向 import）；权限依赖已上移 `app/core/deps.py`。若后续 chat/generation 也复用归档工具，需确认是否再上移。
   5. `GET /batches/{batch_id}/download` 在 4 号生成模块中也会出现；合并分支时需改为只保留一份实现，避免 FastAPI 重复路由。
+## 3 号 Agent 会话交互后端最终实现（2026-10-31）
+
+- **模块位置**：3 号后端统一放在 `backend/app/modules/chat/`，不改动 `modules/auth/` 内部实现；会话/消息/AgentRun 表复用 2 号 `app/models/workspace.py`，不重复建表。
+- **复用 2 号基线**：会话列表、首条消息建会话、SSE 骨架、自动命名、幂等由 2 号 demo 04 提供；3 号增加重命名、软删除、惰性超时、`meta.duplicate`、`done.requirement_changed`、10 轮上下文、上传图校验与 `agent_runs` 明细。
+- **合并节奏**：骨架先提交并推送 `feat/agent-chat-backend-demo`，`--ff-only` 合并 `main`；业务代码在功能分支开发，验证后再合并。2 号 demo 04 合并 main 后才开始 3 号实现。
+- **真实模型**：
+  - 文本模型走火山方舟 OpenAI 兼容接口：`ARK_API_KEY`、`ARK_BASE_URL` 默认 `https://ark.cn-beijing.volces.com/api/v3`、`ARK_TEXT_MODEL` 默认 `doubao-seed-character-260628`。
+  - 规划 Agent 非流式、商品理解 Agent 流式；流式正文结束后用 `<<<SUMMARY>>>` 哨兵 + 摘要 JSON，哨兵与 JSON 不下发前端。
+  - Token 取接口 usage；助手消息与 done 事件记两个 Agent 合计；`agent_runs` 分 Agent 记 Token、模型名、耗时。
+  - `ARK_API_KEY` 为空或 `CHAT_USE_STUB=true` 时使用确定性演示桩，Token 记 0；测试由 `tests/conftest.py` 强制 `CHAT_USE_STUB=1`。
+  - 生图模型 `doubao-seedream-5-0-pro-260628` 与生文共用同一 Key，但属于 4 号 PRD，3 号不调用。
+- **调用时序**：模型调用放在 SSE 流内、`workspace_lock` 之外；`meta → planner started/finished → product started → delta → finished → done` 与实际调用一致；15 秒心跳由 `stream.py` 包装。
+- **边界修复（代码审查后）**：失败重试刷新 `created_at`，避免被超时规则立即标记；按“下一条用户消息”定位回复，避免重试覆盖后一条消息；首条消息去重只查 active 会话；重放 done 返回该条回复保存时的摘要；测试库改用 `esimage_chat_test` 隔离并行 agent。
+- **环境**：复用 `esimage-postgres`（55433）；8000 被 1 号登录 demo 占用，3 号联调用 8001；chrome-devtools MCP 已用于 Swagger UI 验证。
+- **实现状态**：业务代码提交 `6e0c96c`，rebase 到 `4ea5d64` 后推送 `feat/agent-chat-backend-demo` 并 `--ff-only` 合并 `main`；全量 `pytest` **85 passed**；真实豆包联调通过。
+- **已知 demo 边界**：参数校验先于幂等重放（已删除上传图的极端重试会返回 30006）；真实模型措辞需联调抽检；接口不返回 usage 时 Token 记 0。

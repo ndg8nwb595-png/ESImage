@@ -8,7 +8,9 @@ from pathlib import Path
 # 必须在导入 app.* 之前覆盖环境变量，确保 engine 指向测试库
 TEST_DB_HOST = os.getenv("TEST_DB_HOST", "127.0.0.1")
 TEST_DB_PORT = os.getenv("TEST_DB_PORT", "55433")
-TEST_DB_NAME = os.getenv("TEST_DB_NAME", "esimage_test")
+# 同设备可能有多个 agent 克隆共用 55433 的 PostgreSQL；
+# 3 号使用独立测试库，避免并行测试互相清表。
+TEST_DB_NAME = os.getenv("TEST_DB_NAME", "esimage_chat_test")
 TEST_DB_USER = os.getenv("TEST_DB_USER", "esimage")
 TEST_DB_PASSWORD = os.getenv("TEST_DB_PASSWORD", "esimage")
 
@@ -23,6 +25,8 @@ ADMIN_DATABASE_URL = (
 
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ.setdefault("JWT_SECRET", "test-only-secret-esimage-0123456789abcdef")
+# 测试默认使用确定性演示桩，避免读取开发者 .env 中的 ARK_API_KEY 产生真实调用
+os.environ.setdefault("CHAT_USE_STUB", "1")
 # 测试时不等待演示管线阶段停顿，并把本地存储放到独立的测试目录
 os.environ.setdefault("DEMO_PIPELINE_STAGE_DELAY", "0")
 os.environ.setdefault(

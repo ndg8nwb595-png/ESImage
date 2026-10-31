@@ -818,13 +818,14 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 - `git status --short`：提交前确认移动为 rename、新增文件为 untracked，提交后已全部纳入；未执行代码、迁移、种子或回归。
 - 文档生成时未提交；随后提交到 `docs/deploy-ops-minimal-demo` 并合并 `main`；未创建 GitHub issue。
 
-## 2026-10-31 会话 16：历史作品后端最小 demo 实现
+## 2026-10-31 会话 17：历史作品后端最小 demo 实现
 
 ### 分支与提交
 
 - 从 `main` 创建 `feat/history-backend-demo`。
 - 骨架提交 `4ea5d64 chore: 建立历史作品后端模块骨架`：新增 `backend/app/modules/history/README.md`；push 后 `git merge --ff-only` 到 `main` 并 push。
-- 业务实现提交（待本次会话结束时提交）：见下方文件清单。
+- 业务实现提交 `afbdc18 feat: 实现历史作品后端最小 demo`。
+- 合并最新 `origin/main`（`6db0259`）解决冲突后，提交合并结果并推送功能分支。
 
 ### 新增文件
 
@@ -853,10 +854,20 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 ### 验证命令与结果
 
 - `python -m pytest tests/test_history.py -q`：8 passed。
-- `python -m pytest -q`：67 passed。
+- `python -m pytest -q`：合并 main 前 67 passed；合并后 93 passed。
 - `python -m compileall -q app tests scripts`：通过。
 - `bash scripts/curl_history_smoke.sh`：通过；覆盖列表/分页、详情、404/403、缩略图、内容、单张下载、非法文件名、示例下载 409、整组 ZIP（completed/partial/sample）、归档读取与缺失降级 30014、管理员 403、未登录 401。
 - 复用 docker `esimage-postgres`（55433）；curl 使用独立库 `esimage_history_curl`，未干扰其他 agent。
+
+### 合并最新 main 的集成处理
+
+- `origin/main` 已由其他 agent 合入一版 history 内联实现（仅 `router.py`）、workspace 归档路径与 `app/core/deps.py` 的权限依赖。合并时以本分支的 `service.py` + `zip_export.py` + `seed.py` 为唯一实现，`router.py` 保留本分支版本并改为从 `app.core.deps` 引入 `require_permission`；main 的内联 ZIP/查询代码不再保留。
+- main 的 `workspace/generations.py` 已有归档路径与权限放宽；合并时保留该结构，把归档读取替换为 `read_image_bytes`（超时/日志），并补 `full + final` 下载校验与共享文件名。
+- main 的 `workspace/service.py` 从 core 重新导出 `require_permission`；合并时补充 `require_any_permission` 重导出，并加入本分支的归档读取、文件名函数与更严格清洗。
+- main 的 `scripts/seed.py` 已调用 `seed_config`；合并后同时调用 `seed_history`。
+- 修复 main 既有启动 bug：`backend/app/modules/admin/router.py` 把子模块当 `APIRouter`，改为从 `admin.<domain>.router` 导入实例，否则整个 app 无法启动。
+- 修复 main 既有测试口径：`tests/test_auth.py` 的双角色权限断言改为从 `ROLE_PERMISSIONS` 派生，适配 admin 权限扩展。
+- 合并后 `pytest -q` 93 passed；`curl_history_smoke.sh` 全部通过；前端 `frontend/src/modules/history/api.ts` 的字段契约与本实现兼容。
 
 ### 独立代码审查与修复（code-review，10 条）
 
@@ -877,3 +888,60 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 - `manifest.csv`：按 5 号列「宽度/高度」分开；4 号接口文档用单列「尺寸」（`1000x1000`），需与 4 号 demo 08 统一。
 - 示例图下载 409 文案：沿用 2 号「示例图确认前不可下载」，5 号 §8.4 写「当前图片不可下载」；为不破坏 2 号已有调用暂未改。
 - 归档读取/文件名工具仍在 `workspace/service.py`（history 反向 import），未迁移到 `app/core`；架构归属需用户确认。
+## 2026-10-31 会话 16：Agent 会话交互后端实现与豆包接入
+
+### 新增文件
+
+1. `backend/app/modules/chat/router.py` —— `PATCH /sessions/{id}` 重命名、`DELETE /sessions/{id}` 软删除。
+2. `backend/app/modules/chat/schemas.py` —— `RenameSessionRequest`（`title: Any`，由路由区分 10002/10003/10004）。
+3. `backend/app/modules/chat/service.py` —— 标题校验、软删除、消息惰性超时、上传图归属校验、需求变化判定、最近已确认示例查询。
+4. `backend/app/modules/chat/agents.py` —— 10 轮上下文组装、系统提示词、演示桩规划/回复、需求摘要合并与类型归一。
+5. `backend/app/modules/chat/model.py` —— 豆包 OpenAI 兼容接入：规划非流式、商品理解流式、`<<<SUMMARY>>>` 摘要解析、usage Token、演示桩回退。
+6. `backend/app/modules/chat/stream.py` —— SSE 事件输出与 15 秒心跳包装（后台线程 + 队列）。
+7. `backend/tests/test_chat.py` —— 22 个 3 号接口/行为用例。
+8. `backend/tests/test_chat_model.py`、`backend/tests/chat_model_fakes.py` —— 豆包接入假客户端单测，不产生真实调用。
+
+### 修改文件
+
+1. `backend/app/modules/workspace/sessions.py` —— 复用并集成 3 号增量：`meta.duplicate`、`done.requirement_changed`、惰性超时、上传图参数、10 轮上下文、Agent 调用明细、失败重试复用原消息、`last_message_preview` 去换行/首尾空格。
+2. `backend/app/modules/workspace/schemas.py` —— `WorkspaceParams` 增加可选 `upload_ids`。
+3. `backend/app/main.py` —— 挂载 chat 路由。
+4. `backend/app/core/config.py` —— 新增 `CHAT_MESSAGE_TIMEOUT_SECONDS`、`CHAT_CONTEXT_ROUNDS`、`SSE_HEARTBEAT_SECONDS`、`ARK_API_KEY`、`ARK_BASE_URL`、`ARK_TEXT_MODEL`、`ARK_TIMEOUT_SECONDS`、`CHAT_USE_STUB`。
+5. `backend/.env.example` —— 补充 3 号聊天配置与豆包文本模型配置；记录生图模型 `doubao-seedream-5-0-pro-260628` 留给 4 号。
+6. `backend/requirements.txt` —— 增加 `openai>=1.0,<4.0`。
+7. `backend/tests/conftest.py` —— 测试库默认改为 `esimage_chat_test`，并强制 `CHAT_USE_STUB=1`，避免并行 agent 清表与真实调用费用。
+8. `backend/app/modules/chat/README.md` —— 更新为最终模块说明、豆包配置与已知边界。
+
+### 实现口径
+
+- 重命名：去首尾空格 1~50 字；纯空格/未传 10002、超长 10004、非字符串/换行控制字符 10003；只更新 `title` 与 `updated_at`。
+- 软删除：只把 `status` 置 `hidden`，保留消息/批次/图片/上传图，不更新 `last_message_at`；重复删除 30013。
+- 消息超时：分页与重复请求前，把超过 120 秒仍为 `sending` 的 Agent 消息标记 `failed`；用户消息不参与。
+- 幂等：已完成重放 `meta.duplicate=true` + 一条完整 delta + done；处理中 409/30005；失败复用原 Agent 消息并刷新 `created_at`，不新增用户/回复消息。
+- 需求变化：最近一个 `sample + confirmed` 批次，比较风格、尺寸、卖点集合；无已确认示例始终 false；重放按当前状态重算。
+- 上下文：系统提示词、当前参数、需求摘要、最近 10 轮（20 条非 system 消息）、已确认示例描述；超限注入省略说明，只进入上下文与 `agent_runs.input_full`，不写 `chat_messages`。
+- 豆包：规划非流式 JSON；商品理解流式正文 + `<<<SUMMARY>>>` + 摘要 JSON；Token 取 usage，助手消息与 done 记两 Agent 合计；无 Key 或 `CHAT_USE_STUB=true` 走演示桩。
+
+### 代码审查修复
+
+- 失败重试刷新 `created_at`，避免被超时规则立即标记。
+- 回复归属改为「该用户消息之后、下一条用户消息之前」的最新 assistant，避免重试重放/覆盖后一条消息。
+- 首条消息去重只查 `active` 会话，已隐藏会话不可再重放或写回。
+- 重放 `done.requirement_summary` 优先读该条回复的 `agent_runs.output_full` 快照，`requirement_changed` 仍按当前状态重算。
+- 模型调用移入 SSE 流内、`workspace_lock` 之外；失败在流内标记 failed 并返回 error。
+- 需求变化查询与上下文共用 `latest_confirmed_sample`。
+- 新增测试用中文步骤日志；测试库改用 `esimage_chat_test`。
+
+### 测试与验证
+
+- 全量 `pytest -q`：**85 passed**（`test_auth`、`test_chat`、`test_chat_model`、`test_workspace`）。
+- `test_chat.py` 覆盖：重命名成功/校验/权限/归属、软删除与数据保留、消息惰性超时、重放 duplicate、失败重试复用、隐藏会话重放、需求变化（风格/尺寸/卖点/重放）、10 轮上下文与省略说明、摘要保留、`agent_runs`、上传图校验、聊天不建批次、心跳、真实模型集成（假客户端）。
+- curl 真实服务（8001）：6 个会话接口全部通过；PATCH 成功与 10002/10003/10004；DELETE 与重复删除 30013；隐藏/他人会话 30013；管理员 403/20005；上传图 30006。
+- 真实豆包：4 次对话成功（约 3~4 秒）；Token 419/119、521/160、513/175 等；摘要含类目、卖点、目标人群、场景、语气、限制；有风格时确认并追问场景，无风格时列 4 个风格建议；提示词已禁止“我会直接生图”。
+
+### 提交与合并
+
+- 提交 `6e0c96c feat: 实现 Agent 会话交互后端增量与豆包接入`（23 文件，+2625/-167）。
+- 提交前 rebase 到最新 `origin/main` `4ea5d64`（生图/历史/部署骨架），解决五个记忆文档冲突（双方内容全部保留）；rebase 后全量 `pytest` **85 passed**。
+- 推送 `feat/agent-chat-backend-demo`，`--ff-only` 合并 `main` 并推送 `4ea5d64..6e0c96c`，远程 `main` 已更新。
+- `.smoke/` 为临时 curl 产物，已删除并加入 `.gitignore`；`backend/.env` 含真实 Key，已被 `.gitignore` 忽略，禁止提交。

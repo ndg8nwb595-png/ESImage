@@ -148,3 +148,16 @@
 - **种子要能自愈存储丢失**：只按 `client_request_id` 跳过批次，会在删 storage 后留下全 404 的演示数据；启动时校验图片记录数、file/thumbnail 是否存在，缺失就清理并重建。
 - **curl 脚本清理范围要限定到自己的子目录**：多个 agent 共用 `backend/.curl_tmp` 时，`rm -rf .curl_tmp` 会误删他人数据；只删 `.curl_tmp/<自己的目录>`。
 - **媒体接口日志按“能力”命名而非调用方**：归档读取放在 workspace 的存储工具里时，logger 用 `esimage.storage` 比 `esimage.history` 更准确，否则按模块配置日志会漏收。
+- **并行分支合并前先查 main 是否已有同模块实现**：本次 main 已有另一版 `history/router.py` 内联实现；直接合并会出现两套列表/ZIP 逻辑。先 `git show origin/main:<path>` 对比契约，再决定保留哪套，避免重复路由或字段漂移。
+- **`from package import router` 拿到的是子模块而不是 APIRouter 实例**：管理后台汇总路由必须写 `from app.modules.admin.accounts.router import router as accounts_router`；否则 FastAPI `include_router` 收到模块，启动时报 `AttributeError: module ... has no attribute '_contains_router'`。
+- **合并后先跑全量测试再跑 curl**：main 的 auth 种子可能新增权限点，旧测试的硬编码权限集合会失败；优先把断言改为从种子常量派生，而不是继续写死。
+- **权限依赖已上移 core 时不要保留旧副本**：本分支原在 `workspace.service` 定义 `require_permission/require_any_permission`，main 已放到 `app.core.deps`；合并时保留 core 版本，workspace 仅重新导出，避免两套实现产生行为差异。
+
+- **豆包接入用 OpenAI 兼容 SDK**：`OpenAI(base_url="https://ark.cn-beijing.volces.com/api/v3", api_key=os.getenv("ARK_API_KEY"))`；文本用 `chat.completions.create`，生图用 `images.generate(model="doubao-seedream-5-0-pro-260628")`。生文与生图共用同一个 Key，但属于不同 PRD 模块，不要混在一个接口里。
+- **流式输出要区分“正文”和“结构化结果”**：本次用 `<<<SUMMARY>>>` 哨兵把用户正文与需求摘要 JSON 分开；正文实时下发，哨兵后的内容缓冲解析，不把哨兵/JSON 发给前端。哨兵可能被拆到多个 chunk，必须保留 `len(哨兵)-1` 个字符再判断。
+- **流式 usage 需要 `stream_options={"include_usage": True}`**：火山方舟实测支持，最后一个 chunk 带 `usage`；不支持时捕获后重试不带该参数，Token 记 0。
+- **模型看不到参数就会“失忆”**：只把 `messages` 传给模型时，商品名称/风格/摘要不在对话里，模型会反问“请提供商品信息”。必须额外注入一条 system 消息，包含当前参数、需求摘要与已确认示例描述。
+- **测试不能读开发者的真实 Key**：conftest 在导入 app 前 `os.environ.setdefault("CHAT_USE_STUB", "1")`；真实模型路径用假 OpenAI 客户端单测，避免测试产生费用。
+- **并行 agent 的测试库要隔离**：同设备多个克隆共用 55433 PostgreSQL 时，测试库默认名相同会互相清表；本仓库改用 `esimage_chat_test`，并用 `TEST_DB_NAME` 可覆盖。
+- **模型调用不要放在进程锁里**：真实模型时延会把所有工作台写操作串行化；本次把规划/商品理解调用放进 SSE 流内，锁只覆盖会话/用户消息/回复占位的创建。
+- **中文 JSON 在 Windows Git Bash 下用 `--data-binary @文件`**：Python 写 UTF-8 文件时不要用 `/tmp` 绝对路径（Python 与 Git Bash 的 `/tmp` 映射不同），用仓库内相对目录或 `$TEMP`。

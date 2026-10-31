@@ -1,7 +1,8 @@
-"""鉴权依赖：解析 Bearer token 并校验账号状态。"""
+"""鉴权依赖：解析 Bearer token、校验账号状态与权限点。"""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import jwt
@@ -85,3 +86,25 @@ def get_current_auth(request: Request, db: Session = Depends(get_db)) -> AuthCon
         roles=_role_codes(user),
         permissions=_permission_codes(user),
     )
+
+
+def require_permission(code: str) -> Callable[..., AuthContext]:
+    """要求当前用户拥有指定权限点；缺少返回 403/20005。"""
+
+    def dependency(auth: AuthContext = Depends(get_current_auth)) -> AuthContext:
+        if code not in auth.permissions:
+            raise ApiError(403, 20005, "无权限")
+        return auth
+
+    return dependency
+
+
+def require_any_permission(*codes: str) -> Callable[..., AuthContext]:
+    """要求拥有任一权限点；历史页预览/缩略图需 user.history 或 user.generate。"""
+
+    def dependency(auth: AuthContext = Depends(get_current_auth)) -> AuthContext:
+        if not any(code in auth.permissions for code in codes):
+            raise ApiError(403, 20005, "无权限")
+        return auth
+
+    return dependency

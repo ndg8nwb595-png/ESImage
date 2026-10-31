@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.deps import AuthContext
+from app.core.deps import AuthContext, require_permission
 from app.core.response import ok
 from app.modules.history.service import (
     detail_payload,
@@ -19,7 +19,6 @@ from app.modules.history.service import (
     visible_images,
 )
 from app.modules.history.zip_export import build_batch_zip
-from app.modules.workspace.service import require_permission
 
 router = APIRouter(tags=["history"])
 

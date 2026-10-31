@@ -244,12 +244,23 @@
 - 并发情况：10 号目录迁移与 `.claude/MEMORY_*` 已有并行会话改动；本次只追加 11 号内容与必要路径引用，未覆盖他人改动。
 - 未运行代码或测试；文档生成时未提交，随后提交到 `docs/deploy-ops-minimal-demo` 并合并 `main`；未创建 GitHub issue（tickets 为本地文件）。
 
-## 2026-10-31 会话 16：历史作品后端最小 demo 实现
+## 2026-10-31 会话 17：历史作品后端最小 demo 实现
 
 - 用户要求：连接 chrome-devtools MCP（本次为纯后端任务，未实际使用浏览器）；在仓库中找到 5 号模块目录；只做后端；新建分支开发；先理清项目层级、建模块骨架并 push、ff 合并 `main`，再完成开发；每个接口用 curl 验证；同机有其他 agent 在并行开发，调试时复用挂起进程，尤其是 docker。
 - 环境：复用已运行的 `esimage-postgres`（宿主 55433）；8000/8001 属于其他 agent，curl 验收选用 8020；验收使用独立库 `esimage_history_curl` 与 `.curl_tmp/storage_history`，避免污染同机开发库。
 - 分支：`feat/history-backend-demo`；骨架提交 `4ea5d64` 已 push 并 ff 合并 `main`。
 - 实现：`backend/app/modules/history/` 新增 `router.py`、`service.py`、`zip_export.py`、`seed.py`；`main.py` 挂载；workspace 图片预览/缩略图权限放宽为 `user.history` 或 `user.generate`，单张下载补 `full + final` 校验、归档读取与更严格文件名清洗；新增 `ARCHIVE_READ_TIMEOUT_SECONDS`。
-- 验证：`tests/test_history.py` 8 个用例；全量 `pytest` 67 个用例通过；`scripts/curl_history_smoke.sh` 覆盖接口文档 §16 全部调用并通过。
+- 验证：`tests/test_history.py` 8 个用例；合并最新 `origin/main` 后全量 `pytest` 93 个用例通过；`scripts/curl_history_smoke.sh` 覆盖接口文档 §16 全部调用并通过。
 - 独立代码审查：`code-review` 返回 10 条；已修复超大页码 500、聚合未按用户收窄、ZIP/单张文件名重复、可见性常量重复、种子文件缺失不自愈、curl 删除共享临时目录、归档超时无效（改为 `shutdown(wait=False)` 并补超时用例）。保留 3 条待用户裁决：种子计数口径、manifest 与 4 号列差异、示例图下载文案（2 号 vs 5 号）。
 - 待用户裁决：种子按「历史可见 21 个（18 completed + superseded + archived + partial）」实现，与文档表格「21 个 completed + 1 partial」存在计数口径差异；manifest 按 5 号列（宽度/高度分开），与 4 号「尺寸」单列不同；示例图下载 409 文案沿用 2 号「示例图确认前不可下载」。
+## 2026-10-31 会话 16：Agent 会话交互后端实现与豆包接入
+
+- 2 号 `feat/workspace-backend-demo` 已提交并合并 `main`（`115fb88`）；将 3 号骨架 rebase 到最新 main，解决五个记忆文档冲突（双方内容全部保留），推送 `feat/agent-chat-backend-demo` 并合并 main（`a28bfe2`）。
+- 基于 2 号 `modules/workspace/sessions.py` 实现 3 号增量：PATCH 重命名、DELETE 软删除、消息惰性超时、`meta.duplicate`、`done.requirement_changed`、10 轮上下文、上传图校验、`agent_runs` 双 Agent 明细；新增 `modules/chat/` 的 router/schemas/service/agents/model/stream。
+- 用户提供火山方舟接入方式与 `ARK_API_KEY`（已写入 `backend/.env`，不提交）。实现真实豆包文本模型：规划 Agent 非流式、商品理解 Agent 流式 + `<<<SUMMARY>>>` 摘要 JSON；Token 取 usage；无 Key 或测试时走演示桩（conftest 强制 `CHAT_USE_STUB=1`）。
+- 真实豆包验证 4 次：约 3~4 秒返回；Token 419/119、521/160、513/175 等；摘要正确提取类目、卖点、目标人群、场景、语气、限制；有风格时确认需求并追问场景，无风格时列出 4 个风格建议；提示词已禁止“我会直接为你生图”。
+- 用户补充：生图模型为 `doubao-seedream-5-0-pro-260628`，与生文共用 `ARK_API_KEY`；该能力属于 4 号，3 号只在 `.env.example` 记录模型名，不调用。
+- 代码审查后修复：失败重试刷新 `created_at`、按“下一条用户消息”定位回复、首条消息只查 active 会话、重放返回保存时摘要、模型调用移入 SSE 流内、测试库隔离为 `esimage_chat_test`。
+- 验证：全量 `pytest` **85 passed**；curl 真实服务 6 个接口通过，含重命名校验、软删除、隐藏/他人 30013、管理员 403、上传图 30006；Swagger UI 已用 chrome-devtools 打开，OpenAPI 含 6 个会话接口。
+- 收尾：提交 `6e0c96c`；rebase 到最新 `origin/main` `4ea5d64`（解决五个记忆文档冲突），全量 `pytest` **85 passed**；推送功能分支并 `--ff-only` 合并 `main`，远程 `main` 已更新；`.smoke/` 已删除并加入 `.gitignore`。
+- 未做：生图模块（4 号，模型 `doubao-seedream-5-0-pro-260628`）；管理端聊天记录查询（8 号）。

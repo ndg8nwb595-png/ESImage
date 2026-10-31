@@ -25,6 +25,8 @@ backend/.curl_tmp/
 # 日志与临时文件
 *.log
 logs/
+# 本地 curl 冒烟临时文件
+.smoke/
 .DS_Store
 Thumbs.db
 

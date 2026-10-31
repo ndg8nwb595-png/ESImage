@@ -91,17 +91,14 @@ def test_login_three_demo_accounts(client, username):
 
 def test_dual_role_account_has_both_permission_groups(client):
     print("[测试] 双角色账号返回两组权限")
+    from app.modules.auth.seed import ROLE_PERMISSIONS
+
     response = _login(client, username="demo_dual")
     assert response.status_code == 200
     user = response.json()["data"]["user"]
     assert user["roles"] == ["admin", "user"]
-    assert set(user["permissions"]) == {
-        "user.workspace",
-        "user.generate",
-        "user.history",
-        "user.profile",
-        "admin.dashboard.view",
-    }
+    expected = set(ROLE_PERMISSIONS["user"]) | set(ROLE_PERMISSIONS["admin"])
+    assert set(user["permissions"]) == expected
 
 
 def test_wrong_password_returns_unified_error(client):
