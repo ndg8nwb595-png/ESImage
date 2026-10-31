@@ -1,0 +1,60 @@
+import { Navigate, createBrowserRouter } from 'react-router-dom'
+
+import AdminDashboardPage from '@/modules/admin/pages/DashboardPage'
+import ForbiddenPage from '@/modules/errors/pages/ForbiddenPage'
+import NotFoundPage from '@/modules/errors/pages/NotFoundPage'
+import HistoryPage from '@/modules/history/pages/HistoryPage'
+import ProfilePage from '@/modules/profile/pages/ProfilePage'
+import LoginPage from '@/modules/auth/pages/LoginPage'
+import WorkspacePage from '@/modules/workspace/pages/WorkspacePage'
+import AppLayout from '@/shared/layouts/AppLayout'
+import { RequireAuth, RequirePermission } from './guard'
+
+export const router = createBrowserRouter([
+  { path: '/', element: <Navigate to="/workspace" replace /> },
+  { path: '/login', element: <LoginPage /> },
+  {
+    element: <RequireAuth />,
+    children: [
+      {
+        element: <AppLayout />,
+        children: [
+          {
+            path: '/workspace',
+            element: (
+              <RequirePermission permission="user.workspace">
+                <WorkspacePage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/history',
+            element: (
+              <RequirePermission permission="user.history">
+                <HistoryPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/profile',
+            element: (
+              <RequirePermission permission="user.profile">
+                <ProfilePage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/admin/dashboard',
+            element: (
+              <RequirePermission permission="admin.dashboard.view">
+                <AdminDashboardPage />
+              </RequirePermission>
+            ),
+          },
+        ],
+      },
+    ],
+  },
+  { path: '/403', element: <ForbiddenPage /> },
+  { path: '*', element: <NotFoundPage /> },
+])
