@@ -60,7 +60,7 @@
 | 登录最小 demo 任务拆解 | 完成 | `docs/prd/1-登录界面/issues/01`~`06`，六个垂直切片 |
 | 登录最小 demo 接口文档 | 完成 | `docs/prd/1-登录界面/接口文档-登录最小demo.md`，含 3 个 auth 接口、JWT、错误码、前端处理、审计 |
 | 发布到 GitHub issue | 未做（按用户要求输出到本地文件夹） | 如需发布可再执行 `gh issue create` |
-| 登录最小 demo 代码实现 | 未开始 | 按 01→02→03→04/05/06 顺序推进 |
+| 登录最小 demo 代码实现 | 后端完成（会话 14），前端按用户要求暂不开发 | 6 张表 + 3 个 auth 接口 + 幂等种子 + 31 个 pytest；详见文末「会话 14」 |
 
 ## 2026-10-31 PRD 交叉评审（待用户裁决）
 
@@ -213,3 +213,18 @@
 - 前提：1 号 demo 01~03；6 号 demo 01/06；4 号 demo 01；可选 4 号 demo 03/04、5 号 demo 05、8 号 demo。
 - 依赖：6 号 demo 01 + 4 号 demo 01 → 01；01 → 02；01 → 03 → 04 → 05；03 + 6 号 demo 06 + 4 号 demo 01 → 06。
 - 用户确认的取舍：6 个切片；不做数据导出；概览用进程内缓存；媒体走鉴权接口；种子模拟归档与失败/替代图。
+
+## 2026-10-31 会话 14：登录最小 demo 代码实现（后端）
+
+| 需求 | 状态 | 实现手段 |
+| --- | --- | --- |
+| 工程骨架与演示账号（ticket 01） | 完成 | `docker-compose.yml` 起 PostgreSQL 16（宿主机 55433）；`scripts/init_db.py` 建 6 张表；`modules/auth/seed.py` 幂等种子三角色、4 权限、3 个演示账号 |
+| 登录接口与登录页闭环（ticket 02） | 后端完成 | `POST /api/v1/auth/login`，校验用户名/密码格式、bcrypt 校验、失败统一 401 `20001`、成功签发 JWT 并写审计 |
+| 登录态恢复与路由守卫（ticket 03） | 后端完成 | `GET /api/v1/auth/me`，校验签名/过期/账号状态/`token_version` |
+| 角色分流与双角色切换（ticket 04） | 后端完成 | 登录与 `/me` 返回 `roles`/`permissions`；`demo_dual` 同时具备 user+admin |
+| 账号状态即时失效（ticket 05） | 完成 | 每请求查库校验 `status=active` 与 `token_version`；禁用返回 403 `20004`，版本不符返回 401 `20003` |
+| 退出登录与审计（ticket 06） | 完成 | `POST /api/v1/auth/logout` 返回 `data=null`，审计 `auth.logout`；登录成功/失败均审计且不落密码 |
+| 前端页面（登录页、守卫、角色落地页） | 按用户要求取消 | 已删除本轮创建的 5 个前端文件，`frontend/` 仅保留骨架 `.gitkeep` |
+
+- 验证：`pytest` 31 passed；真实服务冒烟（登录 200、`/me` 200、错误密码 401/20001、无 token 401/20003、退出 200）。
+- 演示账号：`demo_user` / `demo_admin` / `demo_dual`，密码 `Demo1234`。

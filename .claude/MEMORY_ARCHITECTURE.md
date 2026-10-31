@@ -204,3 +204,14 @@
 - **最小化取舍**：不接 Redis/Alembic/Celery/MinIO；配置缓存不做；预签名用本地 HMAC 适配器模拟；Nginx 与生产 OpenAPI 内网限制留给 11 号；导出/归档/限流不做。
 - **契约口径**：统一响应 `{code,message,data}`；分页 `{items,total,page,page_size}`，`page_size` 1~100；鉴权顺序采用 6 号 demo 的「账号状态先于 `token_version`」并记录与 9 号 §2.2 的差异；权限码来自 `permissions`，超管全量；上传 `30006`、下载归档 `30014`、生成并发 `30003`。
 - **待统一项**：README §6 的 16 项（6 号 8 项 + 鉴权顺序、SSE 重复消息、预览接口、缩略图访问、分页非法值、预签名细节、导出、单张下载权限码），只记录不裁决。
+## 登录最小 demo 后端实现约定（2026-10-31 用户确认）
+
+- **分支策略**：多模块目录骨架先提交并推送 `main`；业务代码提交到 `feat/login-minimal-demo`，验证后合并 `main`。
+- **目录结构**：`backend/app/core/` 放配置、数据库、安全、统一响应、审计、鉴权依赖；`backend/app/models/` 放共享 ORM；`backend/app/modules/auth/` 放登录路由、请求模型、种子；`backend/scripts/` 放建表与种子 CLI；`backend/tests/` 放用例。各模块独立，路由不直接依赖其他模块内部实现。
+- **配置**：`core/config.py` 从 `backend/.env` 读取，`JWT_SECRET` 缺失即 `RuntimeError` 失败退出；`.env` 已在 `.gitignore`，只提交 `.env.example`。
+- **本地数据库**：Docker Compose 起 `postgres:16-alpine`，容器 `esimage-postgres`，宿主机端口 `55433`（5432 被其他项目占用）；开发库 `esimage`，测试库 `esimage_test`。
+- **响应与错误**：成功 `{code:0,message:"ok",data}`；参数错误 400（10001/10002/10003/10004）、凭据错误 401 `20001`、token 过期 401 `20002`、token 无效 401 `20003`、账号不可用 403 `20004`、无权限 403 `20005`、服务端 500 `50001`。
+- **鉴权顺序**：签名/格式 → 过期 → 用户存在 → `token_version` → 账号状态；每请求查库取最新角色与权限（demo 不接 Redis）。
+- **JWT**：HS256，载荷 `sub`（字符串）、`exp`、`iat`、`token_version`、`roles`、`permissions`；`remember_me` 决定 24h / 7d；无 refresh token。
+- **审计**：登录成功/失败、退出均写 `audit_logs`，失败原因仅记 `bad_credentials`，不落密码；IP 取 `X-Forwarded-For` 首个地址或客户端地址。
+- **测试隔离**：`tests/conftest.py` 在导入应用前把 `DATABASE_URL` 指向 `esimage_test`，建库后 `drop_all/create_all` + 种子，测试不污染开发库。

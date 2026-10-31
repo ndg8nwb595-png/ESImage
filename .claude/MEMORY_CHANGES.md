@@ -561,3 +561,63 @@
 - `find docs/prd/7-管理后台-用户与生图记录 -type f` 确认 PRD、README、接口文档与 `issues/01~06` 齐全。
 - 未运行代码或测试；未 commit；未创建 GitHub issue（tickets 为本地文件）。
 - 并发情况：会话期间其他并行会话已写入 8/9/10/11 号目录与 7 号接口文档、并更新五个记忆文档；本次只追加 7 号自身记录，未覆盖他人内容。
+
+## 2026-10-31 会话 14：登录最小 demo 后端实现
+
+### 新增文件
+
+1. `docker-compose.yml` —— PostgreSQL 16（`postgres:16-alpine`，`pull_policy: never`），容器 `esimage-postgres`，宿主机端口 `55433`，含 `pg_isready` 健康检查与命名卷。
+2. `backend/.env.example` —— `DATABASE_URL`、`JWT_SECRET`、`JWT_ALGORITHM` 占位。
+3. `backend/requirements.txt` —— fastapi、uvicorn[standard]、SQLAlchemy、psycopg[binary]、PyJWT、bcrypt、python-dotenv、pytest、httpx。
+4. `backend/pytest.ini` —— `testpaths=tests`、`pythonpath=.`、`-q`。
+5. `backend/app/main.py` —— FastAPI 应用；CORS 默认放行 `http://localhost:5173` 与 `127.0.0.1:5173`；auth 路由挂在 `/api/v1`；统一异常处理（`ApiError`、`RequestValidationError` 缺字段→10002/其余→10003、兜底 500→50001）。
+6. `backend/app/core/config.py` —— 读取 `backend/.env`；`JWT_SECRET` 缺失即抛 `RuntimeError`；TTL 24h/7d；时区 +08:00。
+7. `backend/app/core/database.py` —— `Base`、`engine`、`SessionLocal`、`get_db`。
+8. `backend/app/core/security.py` —— bcrypt cost=12 哈希/校验（密码截断到 72 字节）、签发与解析 JWT。
+9. `backend/app/core/response.py` —— `ApiError`、`ok()`、`error_body()`。
+10. `backend/app/core/audit.py` —— 写 `audit_logs`，IP 取 `X-Forwarded-For` 或客户端地址。
+11. `backend/app/core/deps.py` —— `AuthContext`、`get_current_auth`，按 签名/过期 → 用户存在 → `token_version` → 账号状态 顺序校验，每请求查库取最新角色权限。
+12. `backend/app/models/user.py` —— `users`、`roles`、`permissions`、`user_roles`、`role_permissions` 五张表（关联表用 `Column`）。
+13. `backend/app/models/audit.py` —— `audit_logs`。
+14. `backend/app/modules/auth/schemas.py` —— `LoginRequest`（username/password 可空 + `remember_me`）。
+15. `backend/app/modules/auth/seed.py` —— 幂等种子：3 角色、4 权限点、角色权限关联、3 个演示账号。
+16. `backend/app/modules/auth/router.py` —— 登录、`/me`、退出三个接口。
+17. `backend/scripts/init_db.py`、`backend/scripts/seed.py` —— 建表与种子 CLI，入口加 `sys.stdout.reconfigure(encoding="utf-8")`。
+18. `backend/tests/conftest.py` —— 测试库 `esimage_test`（自动建库）、`drop_all/create_all`、种子、审计与用户状态重置夹具。
+19. `backend/tests/test_auth.py` —— 31 个用例。
+
+### 修改文件
+
+1. `backend/app/models/__init__.py` —— 由空文件改为汇总导出 `AuditLog`、`Permission`、`Role`、`User` 与两张关联表。
+
+### 关键实现口径
+
+- 登录：用户名去首尾空格；格式 `^[A-Za-z0-9_]{4,20}$`；密码 8~32 位且不去空格；查询精确匹配；用户不存在时也执行一次 bcrypt 校验（防时序探测）。
+- 失败统一 `401 + 20001 + "用户名或密码错误"`，审计写 `result=failed`、`detail={"reason":"bad_credentials"}`。
+- 成功：签发 JWT、写 `last_login_at`、审计 `auth.login`；响应 `{token, expires_at, user:{id,username,display_name,avatar_url,roles,permissions}}`。
+- `/auth/me`：`{user:{id,username,display_name,avatar_url}, roles, permissions}`。
+- 退出：审计 `auth.logout`，`data=null`（无状态 JWT，不做服务端吊销）。
+- 角色权限：`user` → `user.workspace`/`user.history`/`user.profile`；`admin` → `admin.dashboard.view`；`super_admin` 暂不建账号。
+
+### 前端文件（已按用户要求删除）
+
+- 本轮曾创建 `frontend/package.json`、`frontend/tsconfig.json`、`frontend/vite.config.ts`、`frontend/index.html`、`frontend/src/test/setup.ts`，用户要求「不用开发前端」后全部删除；`frontend/` 下仅保留骨架 `.gitkeep`，未提交任何前端代码。
+
+### 验证
+
+- `python -c "import app.main"` 通过（重构后导入自检）。
+- `pytest -q` → `31 passed`（仅 Starlette `httpx2` 弃用告警）。
+- 真实服务冒烟（`uvicorn app.main:app --host 127.0.0.1 --port 8000`）：
+  - 登录 `demo_user` → 200，返回 token 与 user；
+  - `GET /auth/me` → 200，roles `["user"]`、权限 3 项；
+  - 错误密码 → 401 `{"code":20001,"message":"用户名或密码错误"}`；
+  - 无 token → 401 `{"code":20003,"message":"token 无效"}`；
+  - 退出 → 200，`data=null`。
+- 数据库：`docker compose up -d` 后 `esimage-postgres` healthy；`scripts/init_db.py` + `scripts/seed.py` 执行成功。
+
+### 提交与合并
+
+- 提交 `f7ed1ba feat: 实现登录最小 demo 后端接口与演示账号`（21 文件，+1352）到 `feat/login-minimal-demo`。
+- 记忆文档提交 `6638391`；rebase 到最新 `origin/main`（`5c4f05d`）时五个记忆文档与并行会话的会话 12/13 记录冲突，按「双方内容全部保留」解决。
+- 功能分支推送 `origin/feat/login-minimal-demo`，随后 `--ff-only` 合并到 `main` 并推送。
+- 未提交仓库根 `SKILL.md`（frontend-design 技能副本，用户要求安装到全局，与本需求无关）。

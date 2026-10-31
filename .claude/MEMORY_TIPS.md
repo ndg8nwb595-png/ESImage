@@ -86,3 +86,11 @@
 - **移动 PRD 后要同步路径表**：0/10/11 的索引/关联文档表是路径型引用，必须改成文件夹路径；接口文档的“上游依据”是散文型引用，可按既有约定保留裸文件名。
 - **并发会话下先看 `git status` 再写共享文件**：本次 7/8 号目录与 `.claude/MEMORY_*` 正被其他会话修改；写 9 号文件与追加记忆前先确认目标不在他人改动范围内，避免覆盖。
 - **“只记录不裁决”要落到文档结构**：把待确认项单独成章，明确写“原样记录、不替任何一方做决定”；不要在契约正文里悄悄选择一种做法又不标注差异。
+- **SQLAlchemy 关联表用 `Column` 不用 `mapped_column`**：`Table(...)` 定义多对多关联表时，`mapped_column` 只适用于声明式映射类，写进 `Table` 会报错；用 `Column(...)`。
+- **Docker 拉镜像失败时先用本地镜像**：镜像仓库镜像源 TLS 超时会导致 `docker compose up` 卡住；`docker images` 查本地已有 tag，改用本地 tag 并加 `pull_policy: never`。
+- **5432 常被其他项目占用**：起 PostgreSQL 前先 `docker ps` 看端口；被占时映射到 `55433`，并同步 `backend/.env` 与 `docker-compose.yml`。
+- **Windows 控制台中文乱码**：脚本入口加 `sys.stdout.reconfigure(encoding="utf-8")`，运行时设 `PYTHONIOENCODING=utf-8`。
+- **模块目录重构后要全局改 import**：`app/config.py` → `app/core/config.py` 后，其他模块仍引用旧路径会在启动时报 `ModuleNotFoundError`；重构完先 `import app.main` 自检。
+- **无 Alembic 的测试库用 `drop_all/create_all`**：在 conftest 里用独立数据库 `esimage_test`，并在导入应用前覆盖 `DATABASE_URL`，避免测试清空开发数据。
+- **提交前先 fetch/rebase**：并行会话会持续推进 `main`，直接在旧基线上提交会导致 push 被拒；先 `git fetch` + `git rebase origin/main`。
+- **记忆文档要在 rebase 之后再写**：并行会话可能已更新 `.claude/MEMORY_*.md`；先 rebase 到最新 `main` 再追加，否则必冲突。

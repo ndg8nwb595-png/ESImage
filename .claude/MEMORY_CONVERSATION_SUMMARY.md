@@ -181,3 +181,14 @@
 - 明确不做：数据导出、图表/排行、后台删除/重生成/改提示词、直连 SQL、Redis/MinIO/Celery/Alembic、真实豆包生成、8 号聊天页。
 - 待后续确认：README §6 与接口文档 §16 的 15/16 项，重点是导出延期、媒体接口与 30024、日期参数命名、内容可见性、superseded 默认口径、统计口径。
 - 未运行代码或测试，未 commit，未创建 GitHub issue（tickets 为本地文件）。
+
+## 2026-10-31 会话 14：登录最小 demo 后端实现
+
+- 用户调用 `/mattpocock-skills:implement` + `/code-change-workflow`，要求按 `docs/prd/1-登录界面/` 开发登录最小 demo，并明确「先后端再前端」。
+- 环境准备：安装 `chrome-devtools` MCP（user scope）、把仓库根 `SKILL.md`（frontend-design）复制到全局 skills；确认前端尚未开发。
+- 后端按 6 个 ticket 的 01~06 实现：PostgreSQL 16（Docker，宿主机 55433）、SQLAlchemy 2.x 六张表、PyJWT HS256、bcrypt cost=12、统一 `{code,message,data}`、3 个 auth 接口、幂等种子与审计。
+- 验证：`pytest` 31 passed；uvicorn 真实冒烟通过（登录/`me`/错误密码/无 token/退出）。
+- 用户要求：新建开发分支 `feat/login-minimal-demo`；先把多模块目录骨架提交并推送 `main`，业务代码提交到功能分支并更新已生成文件中的路径。骨架已推送（`8e12845`）。
+- 前端：本轮已起草 Vite + React + TS 脚手架与登录页方案，用户随即要求「把前端文件删了……不用开发前端」，5 个前端文件已删除，`frontend/` 仅保留骨架目录。
+- 收尾：功能分支 rebase 到最新 `origin/main`（`5c4f05d`；记忆文档与并行会话记录冲突时双方内容都保留）后推送，再 `--ff-only` 合并到 `main` 并推送。
+- 未提交仓库根 `SKILL.md`（全局技能副本，不属于本项目需求）。
