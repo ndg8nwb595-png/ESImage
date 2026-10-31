@@ -325,3 +325,8 @@
 - **失败审计**：404 与账号/角色业务失败都写 `result=failed` + `detail.reason`；`require_permission` 的 20005 不另加未定义动作码，避免超出文档动作清单。
 - **无请求体**：新建/编辑/重置密码无 body 时返回 10002，而不是框架 422。
 - **冒烟脚本**：`curl_admin_smoke.sh` 自带建表与幂等种子，新环境可直接运行。
+- **路由前缀（合并后最终口径）**：`admin/router.py` 使用 `APIRouter()`；`dashboard` / `tokens` / `content` 子路由自带 `/admin` 前缀，其余（accounts、assets、prompts、audit、chat_content、chat_records）在 `include_router` 时加 `prefix="/admin"`。禁止在汇总层再加 `prefix`，否则出现 `/admin/admin`。
+- **统计复用**：用户列表/详情统一调用 `modules/admin/accounts/service.py::build_user_stats`（批量聚合，Token 口径 success + 有 Token 的 failed），不再在 router 内联聚合。
+- **9 号契约**：`modules/contract/openapi.py::PERMISSION_MAP` 的管理端路径必须与 `/api/v1/admin/*` 一致；`demo_super` 统一密码 `Demo1234`。
+- **测试库**：本模块用 `TEST_DB_NAME=esimage_admin_test`；上游 conftest 默认库为 `esimage_admin7_test`，并行运行时用环境变量覆盖。
+- **已知非本模块失败**：11 号 `tests/test_ops.py` 的 2 个用例在干净 `origin/main` 也失败（httpx2 中文头、`delay_ms` monkeypatch），不修改。

@@ -274,3 +274,5 @@
 - 验证：全量 `pytest` **95 passed**；curl 13 个接口全部通过；OpenAPI 共 36 条管理端路由；本地库 `esimage_admin`、端口 8016。
 - 分支：`feat/admin-accounts-backend-demo`；骨架先推送并 `--ff-only` 合并 `main`，业务实现验证后再合并。
 - 独立代码审查后修复 7 项：已删除账号禁止 PATCH 绕过恢复、编辑边界按值判断（兼容前端总提交三字段）、纯空格密码拒绝、种子收敛权限目录、404 失败审计、统计批量聚合、冒烟脚本自初始化；最终全量 **98 passed**，curl 40 项 HTTP + 17 项业务码检查 0 失败。
+- 合并最新 `main`（9 号契约 `d4343c7`/`9ea5316`、7 号管理端整合 `a97801c`、OpenAPI 路径对齐 `f42bf1e`）：解决 `deps.py`、`admin/router.py`、`auth/seed.py`、`test_contract.py` 冲突；管理端统一 `/api/v1/admin/*`，统计采用 `build_user_stats`，补齐 `demo_user2` 并去重 `demo_super`。
+- 合并后全量 **171 collected / 169 passed**；仅剩 2 个 11 号 `test_ops` 既有失败（httpx2 中文头编码、monkeypatch 不存在的 `delay_ms`），已在干净 `origin/main` 工作树复现，按范围未修改；curl 复验 0 失败，OpenAPI 36 条管理端路由无双重前缀。

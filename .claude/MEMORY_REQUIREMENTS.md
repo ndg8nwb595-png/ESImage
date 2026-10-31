@@ -313,6 +313,7 @@
 | 失败审计 | 完成 | 账号/角色写操作失败记录 `result=failed` 与 `detail.reason`，独立事务提交 |
 | 测试与 curl | 完成 | 新增 13 个 pytest 用例；全量 **98 passed**；`curl_admin_smoke.sh` 13 接口全部通过（脚本自动建表/种子） |
 | 代码审查修复 | 完成 | 已删除账号禁止 PATCH 绕过、编辑边界按值判断、纯空格密码拒绝、种子收敛权限目录、404 失败审计、统计批量聚合、无 body 返回 10002 |
+| 合并最新 main | 完成 | 合并 9 号契约与 7 号管理端整合；管理端路径统一 `/api/v1/admin/*`；统计改用 `build_user_stats`；全量 **169 passed / 171**，2 个失败为 11 号 `test_ops` 既有问题（已在干净 main 复现） |
 | 统计口径 | 完成（用户确认） | 内容表已接入，返回真实统计且 `stats_available=true` |
 | 权限目录 | 完成（用户确认） | 名称、类型、分组按 6 号文档；分组只有用户端/管理后台 |
 | Chrome MCP | 部分完成 | MCP 工具已加载；浏览器 profile 被其他 agent 占用时无法新建页面，改用 OpenAPI + curl 验证 |

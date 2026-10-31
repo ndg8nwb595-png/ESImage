@@ -1015,3 +1015,17 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 - `pytest -q`：**98 passed**（含 13 个 6 号管理端用例）。
 - `curl_admin_smoke.sh` 连续两次执行：40 项 HTTP 检查、17 项业务码检查，0 失败；脚本会自动建表/种子。
 - 审查意见中保留 1 项：`PUT /admin/roles/{code}/permissions` 成功返回角色对象（接口文档 §10.2 要求），前端 `api.ts` 类型仍写 `Promise<null>` 但运行时忽略返回值；按「只做后端」未改前端。
+
+### 合并最新 main（第二轮，9 号契约 + 7 号管理端整合）
+
+1. 两次合并 `origin/main`（`9ea5316`、`f42bf1e`），冲突集中在 `core/deps.py`、`admin/router.py`、`auth/seed.py`、`test_contract.py`。
+2. `core/deps.py`：保留上游 `user_id_var` 结构化日志，同时保留「账号状态先于 `token_version`」与超管全量权限。
+3. `admin/router.py`：采用并行 agent 的「dashboard/tokens/content 自带 `/admin` 前缀 + 其余子路由 `prefix="/admin"`」方案，避免双重前缀；保留 `chat_content_router` 与 `chat_records_router`。
+4. `auth/seed.py`：保留 6 号文档版 23 权限目录、超管不落行、收敛逻辑；合并上游 `demo_user2`，删除重复的 `demo_super`。
+5. 用户统计改用并行 agent 的 `accounts/service.py::build_user_stats`（批量聚合，Token 口径为 success + 有 Token 的 failed），删除本分支内联聚合。
+6. 9 号契约：`PERMISSION_MAP` 与 `test_contract.py` 的管理端路径统一为 `/api/v1/admin/*`，`demo_super` 密码统一 `Demo1234`（与 `f42bf1e` 重叠）。
+7. 全量 `pytest`：**171 collected，169 passed，2 failed**。两个失败均来自 11 号 `tests/test_ops.py`，已在干净 `origin/main` 工作树复现，与本次改动无关：
+   - `test_request_id_invalid_regenerated`：httpx2 无法把中文 `X-Request-ID` 编码为 ASCII 头。
+   - `test_selftest_pure`：monkeypatch 了不存在的 `ops_tasks.delay_ms`。
+   按「不触碰不相关内容」未修改，已在汇报中标注。
+8. curl 复验：40 项 HTTP + 17 项业务码检查 0 失败；OpenAPI 36 条 `/api/v1/admin/*` 路由，无 `/admin/admin` 双重前缀。
