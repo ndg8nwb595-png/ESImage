@@ -107,3 +107,58 @@
   - 已隐藏会话统一 404 `30013`；重复删除由前端按成功处理。
   - 消息分页查询时惰性将超过 120 秒的 `sending` Agent 消息标记为 `failed`。
 - **待统一项**：重复消息在 SSE 下的重放形式、已隐藏会话的 PATCH/DELETE 语义、需求变化比对字段、已确认示例图描述来源、消息超时阈值、系统通知写入方、消息中止状态、`requirement_summary` 合并规则，需在正式实现前与 3/4/8/9/10 号文档统一。
+
+## 历史作品最小 demo（2026-10-31 用户确认）
+
+- **文档组织**：5 号 PRD 及其实现文档统一放在 `docs/prd/5-历史作品/`，含 PRD 本体、`README.md`、`issues/`、接口文档；`docs/prd/` 顶层不再保留 `5-历史作品prd.md`。
+- **引用路径**：其他文档引用该 PRD 时使用 `5-历史作品/5-历史作品prd.md`；同目录文档用相对文件名。
+- **任务范围**：最小 demo 只做 5 个垂直切片——历史列表与分页、批次详情与网格、大图预览与单张下载、整组 ZIP 与 manifest、归档读取与降级。
+- **阻塞关系**：1 号 demo 01~03 + 2 号 demo 06/07 → 01 → 02 → {03, 04} → 05；03 与 04 可并行，05 需两条读取路径都完成。
+- **最小化取舍**：
+  - 列表固定每页 20，只接受 `page`，不开放 `page_size`。
+  - 不做每日归档调度与 5 年扫描；用种子模拟 `archived_at` 与 `archive/` 前缀，只验证归档后读取。
+  - 部分失败批次由种子夹具提供（2 号演示管线只产出 `completed`）。
+  - 归档慢读用前端 300ms 耗时判定，不新增 `archived` 字段。
+  - 不做搜索、筛选、收藏、分享、删除、补生成、管理后台内容追溯、移动端。
+- **权限共识**：历史列表/详情/单张下载/整组 ZIP 用 `user.history`；`/images/{id}/content` 与新增 `/images/{id}/thumbnail` 放宽为 `user.history` 或 `user.generate`，不破坏 2 号 demo 已有调用。历史接口访问他人批次按 5 号返回 403 `20005`。
+- **接口增量**：
+  - 新增 `GET /history`、`GET /history/{batch_id}`、`GET /images/{image_id}/thumbnail`。
+  - 复用 2 号 demo 的 `GET /images/{image_id}/content` 与 `GET /images/{image_id}/download`。
+  - 新增 `GET /batches/{batch_id}/download`，与 4 号 demo 08 共用同一契约与实现。
+- **文件规则**：单张与 ZIP 内图片命名 `{商品名称}_{主图|详情图}_{序号}_{yyyyMMddHHmmss}.png`，非法字符替换为下划线，时间戳取图片 `created_at`；ZIP 名取批次 `created_at`；`manifest.csv` 用 UTF-8 BOM、中文表头、`success`/`failed`，每个序号取 `attempt_no` 最大且非 `superseded` 的记录。
+- **归档**：`archived_at` 非空读取 `archive/{file_path}`；缩略图始终热存；超时 `ARCHIVE_READ_TIMEOUT_SECONDS` 默认 60 秒；任一文件不可用返回 30014，ZIP 不返回残缺包。
+- **待统一项**：预览权限与 2/9 号统一、缩略图接口写入 9 号、越权 403/404 全站口径、历史分页是否开放 `page_size`、归档慢读字段、归档不可用时 ZIP 行为、manifest 细节与 4 号 08 统一、封面顺延规则、文件名时间戳取用、部分失败夹具来源。
+
+## 生图任务与结果最小 demo（2026-10-31 用户确认）
+
+- **文档组织**：4 号 PRD 及实现文档统一放在 `docs/prd/4-生图任务与结果/`，含 PRD 本体、`README.md`、`issues/`、接口文档；`docs/prd/` 顶层不再保留 `4-生图任务与结果prd.md`。
+- **引用路径**：其他文档引用该 PRD 时使用 `4-生图任务与结果/4-生图任务与结果prd.md`；文件夹内文档用 `../` 前缀。
+- **定位**：本 demo 升级 2 号 demo 的占位管线（占位 PNG + 桩 Agent → 真实 8 Agent + 真实豆包 + 文字合成），**不改变 2 号 demo 的对外接口**，仅新增接口。
+- **任务范围**：8 个垂直切片——01 数据模型与 Agent 运行时、02 文字留白合成、03 示例批次真实全链路、04 确认全套与详情图、05 失败重试与降级、06 取消、07 单张重试/重生成、08 整组 ZIP。
+- **阻塞关系**：2 号 demo 01 → 01 → 02 → 03（另需 2 号 demo 05）→ 04（另需 2 号 demo 06）→ {05→07, 05→08, 06}；06 与 05 并行。
+- **用户取舍**：
+  - 只走真实豆包，不做演示桩；仅审核生成图（用户上传图不审核）。
+  - 四项恢复能力全做：失败重试、取消、单张重试/重生成、整组 ZIP。
+  - 生成配置只做读取与种子（模板、尺寸预设），不做后台 CRUD。
+  - 不接 Celery/Redis/MinIO，用 FastAPI `BackgroundTasks` + 本地存储；单实例。
+- **demo 约定（接口文档固化）**：
+  - API Key 走环境变量 `DOUBAO_API_KEY`，启动校验缺失即 fail-fast。
+  - 配置读取缓存 60 秒；尺寸校验 512~2048 且为 8 的倍数。
+  - `completed_count` 每次图片状态变化后按成功张数重算。
+  - 跳过的 Agent 在 `agent_runs` 写 `skipped` 标记。
+  - ZIP 内 `manifest.csv` 用 UTF-8 带 BOM；批次超时可配置（默认 1800 秒）。
+  - 故障注入开关仅测试环境可用。
+- **待统一项**：README 与接口文档列出的 12 项（API Key 存放、skipped 标记、可重生成状态、`completed_count` 口径、配置接口、`template_id`、尺寸范围、幂等、批次超时、CSV 编码、审核模型、字体授权）需在正式实现前与 4/9/10 号文档统一。
+
+## 管理后台-账号与权限最小 demo（2026-10-31 用户确认）
+
+- **文档组织**：6 号 PRD 及其实现文档统一放在 `docs/prd/6-管理后台-账号与权限/`，含 PRD 本体、`README.md`、`issues/`（01~08）、`接口文档-账号与权限最小demo.md`；`docs/prd/` 顶层不再保留该 PRD。
+- **引用路径**：0/7/10 号顶层文档用 `6-管理后台-账号与权限/6-管理后台-账号与权限prd.md`；1 号文件夹内文档用 `../6-管理后台-账号与权限/6-管理后台-账号与权限prd.md`。
+- **任务范围**：8 个垂直切片——骨架+权限种子+用户列表、新建、编辑边界、禁用/启用/软删除/恢复、重置密码、用户详情、角色权限、操作日志。
+- **依赖**：1 号 demo 01~03 → 01 → 02 → 03 → {04, 05, 06}；01 → 07；02 → 08。
+- **最小化取舍**：不接 Redis（权限每请求直查 PostgreSQL）、不接 Alembic（建表+幂等种子）；用户统计返回 `0` 且 `stats_available=false`；内容追溯入口按钮禁用占位；其他管理模块与其日志不做；个人中心改密不做；角色权限 LWW。
+- **演示账号**：新增 `demo_super`（`super_admin`），与 `demo_admin`、`demo_user`、`demo_dual` 密码统一 `Demo1234`，仅本地 demo 使用。
+- **权限模型**：`super_admin` 不写 `role_permissions`，按角色即时授予全部 23 个权限码；其他角色取 `role_permissions` 并集；权限判定顺序为 签名/过期 → 账号状态 → `token_version` → 权限码。
+- **错误码约定**：demo 新增 `30017` 用户不存在、`30018` 账号状态不允许、`30019` 日志不存在；管理员分配超管暂用 `20005`；最低权限校验暂用 `30015`。
+- **审计动作码**：`account.create` / `account.update` / `account.reset_password` / `account.disable` / `account.enable` / `account.delete` / `account.restore` / `role.update`，复用 1 号 demo 的 `auth.*`。
+- **待统一项**：README 与接口文档列出的 8 项（新错误码、分配超管码、最低权限码、审计动作码、统计口径、超管权限存储、操作响应结构、正式环境首个超管创建方式）需在正式实现前与 9/10 号文档统一。
