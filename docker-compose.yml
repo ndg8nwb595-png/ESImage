@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    pull_policy: never
+    container_name: esimage-postgres
+    environment:
+      POSTGRES_USER: esimage
+      POSTGRES_PASSWORD: esimage
+      POSTGRES_DB: esimage
+      TZ: Asia/Shanghai
+    ports:
+      - "55433:5432"
+    volumes:
+      - esimage_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U esimage -d esimage"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  esimage_pgdata:
