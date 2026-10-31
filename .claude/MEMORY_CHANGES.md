@@ -995,6 +995,9 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 - `backend/app/modules/admin/content/chat_router.py`：按用户确认保留文件但不注册，README 标注 legacy。
 - `.claude/` 五个记忆文档：双方内容全部保留，并更新最终路由口径与重复实现处理。
 - 合并后需重跑全量测试，确认 main 新增的 `test_admin_accounts.py` / `test_admin_content.py` 与 8 号测试同时通过。
+- **最终验证**：使用独立测试库 `TEST_DB_NAME=esimage_admin_chat8_test` 跑全量，**178 collected / 176 passed / 2 failed**；仅 `test_ops.py` 的 httpx2 中文头与 `delay_ms` 为既有环境失败。默认的 `esimage_admin7_test` 与并行 agent 冲突（对方 `drop_all` 造成死锁），验证时必须用独立库。
+- 合并后重新启动服务（8013）跑 curl 冒烟，8 组接口全部通过；已停止临时服务。
+- 提交 `c8c0843`（8 号实现）与 `0172d4b`（合并最新 main）；推送 `feat/admin-chat-records-backend-demo` 并快进 `main`。
 ## 2026-10-31 会话 17：管理后台-账号与权限后端实现
 
 ### 基线问题修复

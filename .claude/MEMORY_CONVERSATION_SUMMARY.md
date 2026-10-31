@@ -278,6 +278,8 @@
 - 补充确认：8 号 `MODEL_CONFIG_ENCRYPTION_KEY` 与 11 号 `ENCRYPTION_KEY` 采用双名兼容（优先新名，回退旧名，均缺失才启动失败）。
 - 独立审查结论「无阻断问题」；修复 4 条非阻断项：`around_id` 按实际更早条数补齐、`status=""` 等价 all、版本 1 仅在 current<=1 时补写并记 demo_super、捕获 AES-GCM `InvalidTag`。修复后测试与 curl 均通过。
 - 合并最新 `main` 时发现并行 agent 已在 `content/chat_router.py` 放旧聊天实现并与 `chat_records` 同时挂载；用户确认「只挂载新实现」：旧文件保留但不注册，README 标注 legacy。`admin/router.py` 采用 main 的混合前缀方案（dashboard/tokens/content 自带 `/admin`，其余挂载时加）。
+- 合并后测试污染修复：8 号夹具从全局 conftest 移到本模块级 fixture 并在 teardown 清理；auth 种子去重 `demo_super`。因并行 agent 会 `drop_all` 默认测试库，最终用 `TEST_DB_NAME=esimage_admin_chat8_test` 跑全量：178 collected / 176 passed，仅 2 个既有 `test_ops` 失败；合并后 curl 冒烟再次全通过。
+- 提交 `c8c0843`、合并提交 `0172d4b`；推送分支并快进 `main`。
 ## 2026-10-31 会话 17：管理后台-账号与权限后端实现与 curl 验收
 
 - 用户要求：连接 chrome-devtools MCP；在合适位置建模块文件夹；新建分支；先推送分支并快进合并 `main`；只做后端；每个接口用 curl 验证；复用同设备其他 agent 的 docker 进程。

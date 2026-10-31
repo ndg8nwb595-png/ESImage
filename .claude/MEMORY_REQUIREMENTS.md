@@ -346,6 +346,6 @@
 | 系统提示词 | 完成 | 8 Agent 固定顺序列表、详情、保存新版本、回滚生成新版本；`{{变量}}` 识别、未知/缺失建议变量告警；行锁；审计 |
 | 加密密钥启动校验 | 完成 | `MODEL_CONFIG_ENCRYPTION_KEY` 为主、`ENCRYPTION_KEY` 回退；缺失或非 32 字节启动失败；`.env.example` 与测试 conftest 提供演示密钥 |
 | 演示种子 | 完成 | `chat_records/seed.py` 4 会话/消息/调用/批次幂等夹具；auth 种子新增 `demo_super`；config 种子补版本 1 与默认模型配置 |
-| 自动化测试 | 完成 | `tests/test_admin_chat_records.py` 7 用例通过；全量 `pytest` 139 passed / 3 个 celery 环境失败 |
-| curl 验收 | 完成 | `.smoke/curl_module8.sh` 覆盖 8 组接口，全部通过 |
+| 自动化测试 | 完成 | `tests/test_admin_chat_records.py` 7 用例通过；合并后全量 178 collected / 176 passed，2 个 `test_ops` 既有环境失败 |
+| curl 验收 | 完成 | `.smoke/curl_module8.sh` 覆盖 8 组接口，合并前后均全部通过 |
 | 既有缺陷修复 | 完成 | `admin/router.py` 显式导入子模块 `APIRouter`；管理后台路由补 `/admin` 前缀 |

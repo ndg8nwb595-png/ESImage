@@ -170,7 +170,8 @@
 - **`with_for_update()` 只锁已存在的行**：模型配置“无启用行时插入”无法靠行锁防并发，演示环境可接受；正式实现需要唯一索引 + 捕获冲突重试。
 - **`around_id` 的补齐口径要用“实际取到的更早条数”**：接口文档 §4.2 步骤 3 是 `limit - 1 - 已取更早条数`，不是固定 `floor((limit-1)/2)`；否则锚点靠前时会少于 `limit`，且前端没有加载更新消息的游标。
 - **AESGCM.decrypt 密钥不匹配抛 `InvalidTag`**：它不继承 `ValueError`；解密封装必须显式捕获，否则会漏到全局 500 而不是业务加密错误。
-- **种子补历史版本要防止伪造**：当前版本 > 1 且缺少 v1 时，不要用当前内容补 v1；只在 `current_version <= 1` 时补写。
+- **并行 agent 共用默认测试库会互相 `drop_all`**：同设备多个分支同时跑 pytest 时，会话级 `Base.metadata.drop_all` 会与另一进程的查询死锁（`relation users does not exist` / `DeadlockDetected`）。验证前设置独立 `TEST_DB_NAME`（本模块用 `esimage_admin_chat8_test`），不要沿用 main 的 `esimage_admin7_test`。
+- **种子夹具不要放进全局 conftest**：8 号聊天夹具若在会话级种子写入，会污染 7 号内容测试的会话/批次计数；应放在对应测试模块的 module 级 fixture，并在 teardown 精确清理自己的会话及子数据。
 
 - **`from package import router` 可能导入子模块而不是 APIRouter**：当 `package/__init__.py` 为空且存在 `package/router.py` 时，拿到的是模块对象；FastAPI 注册会报 `_contains_router`。必须写 `from package.router import router`。
 - **汇总路由要显式加模块前缀**：子路由只写 `/users` 时，`include_router` 不带 prefix 会挂到 `/api/v1/users`；文档要求 `/api/v1/admin/users` 时，在汇总 `APIRouter(prefix="/admin")` 上统一加，避免逐个接口改。
