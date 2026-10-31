@@ -344,3 +344,9 @@
   5. 上传图只取前 2 张；改为最多 5 张上传 + 素材，压缩后最多 6 张参考图。
 - 复审后 `TEST_DB_NAME=esimage_generation_test python -m pytest`：**76 passed**；`curl_smoke_generation.sh` 替身模式再次全接口通过。
 - 仍未完成：真实 Seedream 全链路（429 安全体验模式额度）；代码尚未 push/合并 main。
+
+### 会话 16 收尾决定（2026-10-31）
+
+- 用户选择：真实 Seedream 额度恢复前**不合并 main**，保留 `feat/generation-backend-demo` 分支；额度调整后先跑 `bash backend/scripts/curl_smoke_generation.sh`，真实通过再合并。
+- 分支已 rebase 到 `origin/main`（`fcc1fde`，含 3 号聊天后端与管理后台骨架），解决 `config.py` / `main.py` / `.env.example` / 5 个 Memory 文档冲突后，全量 **102 passed**，替身 curl 全接口通过，已 force-push 到 `4d392a8`。
+- 当前唯一未完成项：真实生图模型调用仍返回 429 `SetLimitExceeded`（账号安全体验模式额度），不是代码缺陷。
