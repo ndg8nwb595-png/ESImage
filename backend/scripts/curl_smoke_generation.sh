@@ -103,6 +103,41 @@ request_json() {
   expect_http "$code" "$expected" "$title"
 }
 
+
+poll_image_in_batch() {
+  # 用法：poll_image_in_batch <batch_id> <image_id> <超时秒数> <说明>
+  local batch_id="$1"
+  local image_id="$2"
+  local timeout="$3"
+  local title="$4"
+  local deadline=$((SECONDS + timeout))
+  while [ $SECONDS -lt $deadline ]; do
+    code=$(curl -s -o "$TMP_DIR/batch.json" -w "%{http_code}" \
+      "$BASE/generations/$batch_id" -H "Authorization: Bearer $TOKEN")
+    expect_http "$code" "200" "$title 查询批次"
+    local status
+    status=$(python - "$TMP_DIR/batch.json" "$image_id" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))["data"]
+target = int(sys.argv[2])
+for image in data.get("images", []):
+    if image.get("image_id") == target:
+        print(image.get("status", ""))
+        break
+else:
+    print("missing")
+PY
+)
+    echo "[poll] image=$image_id status=$status"
+    case "$status" in
+      success|failed|cancelled) return 0 ;;
+      missing) fail "$title 批次中找不到新图 $image_id" ;;
+    esac
+    sleep 3
+  done
+  fail "$title 超时（${timeout}s）"
+}
+
 poll_batch() {
   # 用法：poll_batch <batch_id> <超时秒数> <说明>
   local batch_id="$1"
@@ -314,8 +349,14 @@ code=$(curl -s -o "$TMP_DIR/regen.out" -w "%{http_code}" -X POST \
   -H "Content-Type: application/json" --data-binary @"$TMP_DIR/regen.json")
 expect_http "$code" "200" "单张重生成"
 NEW_IMAGE_ID=$(json_get "$TMP_DIR/regen.out" "data.image_id")
+REGEN_INDEX=$(json_get "$TMP_DIR/regen.out" "data.index")
 [ "$(json_get "$TMP_DIR/regen.out" "data.attempt_no")" = "2" ] || fail "重生成 attempt_no 不是 2"
-poll_batch "$FULL_BATCH_ID" 900 "重生成后的全套批次"
+
+echo "[curl] 等待新图完成（批次状态在重试期间可能仍为 completed）"
+poll_image_in_batch "$FULL_BATCH_ID" "$NEW_IMAGE_ID" 900 "重生成后的新图"
+[ "$(json_get "$TMP_DIR/batch.json" "data.images.$((REGEN_INDEX - 1)).status")" = "success" ] \
+  || fail "重生成后的新图未成功"
+poll_batch "$FULL_BATCH_ID" 30 "重生成后的全套批次"
 [ "$(json_get "$TMP_DIR/batch.json" "data.status")" = "completed" ] || fail "重生成后批次未回到 completed"
 code=$(curl -s -o "$TMP_DIR/old_image.json" -w "%{http_code}" \
   "$BASE/images/$FULL_IMAGE_ID/content" -H "Authorization: Bearer $TOKEN")
