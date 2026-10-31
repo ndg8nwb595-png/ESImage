@@ -278,4 +278,5 @@
 - **调用时序**：模型调用放在 SSE 流内、`workspace_lock` 之外；`meta → planner started/finished → product started → delta → finished → done` 与实际调用一致；15 秒心跳由 `stream.py` 包装。
 - **边界修复（代码审查后）**：失败重试刷新 `created_at`，避免被超时规则立即标记；按“下一条用户消息”定位回复，避免重试覆盖后一条消息；首条消息去重只查 active 会话；重放 done 返回该条回复保存时的摘要；测试库改用 `esimage_chat_test` 隔离并行 agent。
 - **环境**：复用 `esimage-postgres`（55433）；8000 被 1 号登录 demo 占用，3 号联调用 8001；chrome-devtools MCP 已用于 Swagger UI 验证。
+- **实现状态**：业务代码提交 `6e0c96c`，rebase 到 `4ea5d64` 后推送 `feat/agent-chat-backend-demo` 并 `--ff-only` 合并 `main`；全量 `pytest` **85 passed**；真实豆包联调通过。
 - **已知 demo 边界**：参数校验先于幂等重放（已删除上传图的极端重试会返回 30006）；真实模型措辞需联调抽检；接口不返回 usage 时 Token 记 0。

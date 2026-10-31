@@ -253,4 +253,5 @@
 - 用户补充：生图模型为 `doubao-seedream-5-0-pro-260628`，与生文共用 `ARK_API_KEY`；该能力属于 4 号，3 号只在 `.env.example` 记录模型名，不调用。
 - 代码审查后修复：失败重试刷新 `created_at`、按“下一条用户消息”定位回复、首条消息只查 active 会话、重放返回保存时摘要、模型调用移入 SSE 流内、测试库隔离为 `esimage_chat_test`。
 - 验证：全量 `pytest` **85 passed**；curl 真实服务 6 个接口通过，含重命名校验、软删除、隐藏/他人 30013、管理员 403、上传图 30006；Swagger UI 已用 chrome-devtools 打开，OpenAPI 含 6 个会话接口。
-- 待完成：提交业务代码到 `feat/agent-chat-backend-demo`，推送并合并 main；清理 `.smoke/` 临时文件。
+- 收尾：提交 `6e0c96c`；rebase 到最新 `origin/main` `4ea5d64`（解决五个记忆文档冲突），全量 `pytest` **85 passed**；推送功能分支并 `--ff-only` 合并 `main`，远程 `main` 已更新；`.smoke/` 已删除并加入 `.gitignore`。
+- 未做：生图模块（4 号，模型 `doubao-seedream-5-0-pro-260628`）；管理端聊天记录查询（8 号）。

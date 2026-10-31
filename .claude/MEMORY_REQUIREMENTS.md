@@ -261,7 +261,7 @@
 | 测试 | 完成 | `tests/test_chat.py` + `tests/test_chat_model.py`（假客户端）；全量 `pytest` 85 passed |
 | curl 联调 | 完成 | 6 个接口 + 真实豆包对话；PATCH/DELETE/隐藏 30013/管理员 403/他人会话 30013 全通过 |
 | 独立审查 | 完成 | 修复重试时间戳、回复归属、隐藏会话重放、重放摘要、测试库隔离等 |
-| 提交与合并 | 待完成 | 业务代码尚未 commit/push/merge；下一步执行 |
+| 提交与合并 | 完成 | 提交 `6e0c96c feat: 实现 Agent 会话交互后端增量与豆包接入`；rebase 到 `4ea5d64`，推送功能分支并 `--ff-only` 合并 `main`，远程 `main` 已更新 |
 
 - 已确认范围：只做后端；`PATCH/DELETE /sessions/{id}`、消息分页惰性超时、聊天 SSE 的 `meta.duplicate` 与 `done.requirement_changed`、轻链路与 10 轮上下文、`agent_runs` 落库、需求变化判定。
 - 明确不做：`POST /sessions`、会话恢复、取消接口、`agent_runs` 查询、消息搜索/导出、管理端聊天、聊天触发生图、真实内容审核与 Token 计费。

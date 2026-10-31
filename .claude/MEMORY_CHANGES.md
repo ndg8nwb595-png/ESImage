@@ -871,5 +871,7 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 
 ### 提交与合并
 
-- 业务代码尚未 commit/push/merge；下一步提交到 `feat/agent-chat-backend-demo`，验证后合并 `main`。
-- `.smoke/` 为临时 curl 产物，提交前删除；`backend/.env` 含真实 Key，已被 `.gitignore` 忽略，禁止提交。
+- 提交 `6e0c96c feat: 实现 Agent 会话交互后端增量与豆包接入`（23 文件，+2625/-167）。
+- 提交前 rebase 到最新 `origin/main` `4ea5d64`（生图/历史/部署骨架），解决五个记忆文档冲突（双方内容全部保留）；rebase 后全量 `pytest` **85 passed**。
+- 推送 `feat/agent-chat-backend-demo`，`--ff-only` 合并 `main` 并推送 `4ea5d64..6e0c96c`，远程 `main` 已更新。
+- `.smoke/` 为临时 curl 产物，已删除并加入 `.gitignore`；`backend/.env` 含真实 Key，已被 `.gitignore` 忽略，禁止提交。
