@@ -15,7 +15,7 @@ from app.core.deps import AuthContext, get_current_auth
 from app.core.response import ApiError, ok
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models.user import User
-from app.modules.auth.schemas import LoginRequest
+from app.modules.auth.schemas import LoginRequest, PasswordChangeRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -135,6 +135,37 @@ def logout(
         user_id=auth.user.id,
         username_snapshot=auth.user.username,
         action="auth.logout",
+        result="success",
+        detail=None,
+    )
+    db.commit()
+    return ok(None)
+
+
+@router.put("/password")
+def change_password(
+    payload: PasswordChangeRequest,
+    request: Request,
+    auth: AuthContext = Depends(get_current_auth),
+    db: Session = Depends(get_db),
+) -> dict:
+    """修改密码：校验旧密码；成功后 token_version 递增，当前 token 失效需重新登录。"""
+    old_password = payload.old_password or ""
+    new_password = payload.new_password or ""
+
+    if not old_password or not verify_password(old_password, auth.user.password_hash):
+        raise ApiError(400, 10003, "旧密码错误")
+    if not (8 <= len(new_password) <= 32):
+        raise ApiError(400, 10003, "密码长度需为 8~32 位")
+
+    auth.user.password_hash = hash_password(new_password)
+    auth.user.token_version += 1
+    write_audit(
+        db,
+        request,
+        user_id=auth.user.id,
+        username_snapshot=auth.user.username,
+        action="auth.password_change",
         result="success",
         detail=None,
     )

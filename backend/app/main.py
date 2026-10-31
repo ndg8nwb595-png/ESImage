@@ -14,6 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.response import ApiError, error_body
 from app.modules.auth.router import router as auth_router
 from app.modules.history.router import router as history_router
+from app.modules.profile.router import router as profile_router
 from app.modules.workspace.router import router as workspace_router
 
 logger = logging.getLogger("esimage")
@@ -34,6 +35,7 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(workspace_router, prefix="/api/v1")
 app.include_router(history_router, prefix="/api/v1")
+app.include_router(profile_router, prefix="/api/v1")
 
 
 @app.exception_handler(ApiError)
