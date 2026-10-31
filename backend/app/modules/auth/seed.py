@@ -90,7 +90,9 @@ ROLES: list[tuple[str, str]] = [
 # (用户名, 显示名, 角色码列表)
 DEMO_USERS: list[tuple[str, str, list[str]]] = [
     ("demo_user", "演示用户", ["user"]),
+    ("demo_user2", "演示用户二", ["user"]),
     ("demo_admin", "演示管理员", ["admin"]),
+    ("demo_super", "演示超管", ["super_admin"]),
     ("demo_dual", "双角色演示", ["user", "admin"]),
 ]
 

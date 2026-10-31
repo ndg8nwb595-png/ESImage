@@ -9,8 +9,8 @@ from pathlib import Path
 TEST_DB_HOST = os.getenv("TEST_DB_HOST", "127.0.0.1")
 TEST_DB_PORT = os.getenv("TEST_DB_PORT", "55433")
 # 同设备可能有多个 agent 克隆共用 55433 的 PostgreSQL；
-# 3 号使用独立测试库，避免并行测试互相清表。
-TEST_DB_NAME = os.getenv("TEST_DB_NAME", "esimage_chat_test")
+# 管理后台整合分支使用独立测试库，避免并行测试互相清表。
+TEST_DB_NAME = os.getenv("TEST_DB_NAME", "esimage_admin7_test")
 TEST_DB_USER = os.getenv("TEST_DB_USER", "esimage")
 TEST_DB_PASSWORD = os.getenv("TEST_DB_PASSWORD", "esimage")
 
@@ -74,9 +74,10 @@ def prepared_database():
 
 @pytest.fixture(autouse=True)
 def reset_state():
-    """每个用例前：清空审计日志，恢复演示账号状态。"""
+    """每个用例前：清空审计日志与概览缓存，恢复演示账号状态。"""
     from app.core.database import SessionLocal
     from app.models import AuditLog, User
+    from app.modules.admin.dashboard.service import clear_dashboard_cache
 
     with SessionLocal() as db:
         db.execute(delete(AuditLog))
@@ -85,6 +86,7 @@ def reset_state():
             user.token_version = 0
             user.last_login_at = None
         db.commit()
+    clear_dashboard_cache()
     yield
 
 

@@ -16,13 +16,13 @@ from app.core.deps import AuthContext, require_permission
 from app.core.response import ApiError, ok
 from app.core.security import hash_password
 from app.models.user import Permission, Role, User, user_roles
-from app.models.workspace import AgentRun, CreativeSession, GeneratedImage, GenerationBatch
 from app.modules.admin.accounts.schemas import (
     CreateUserRequest,
     ResetPasswordRequest,
     RolePermissionsRequest,
     UpdateUserRequest,
 )
+from app.modules.admin.accounts.service import build_user_stats
 from app.modules.workspace.service import to_iso
 
 router = APIRouter(tags=["admin-accounts"])
@@ -79,57 +79,18 @@ def _count_active_super(db: Session) -> int:
 
 
 def _user_stats(db: Session, user_id: int) -> dict:
-    image_count = int(
-        db.scalar(
-            select(func.count())
-            .select_from(GeneratedImage)
-            .where(
-                GeneratedImage.user_id == user_id,
-                GeneratedImage.image_type == "final",
-                GeneratedImage.status == "success",
-            )
-        )
-        or 0
-    )
-    session_count = int(
-        db.scalar(select(func.count()).select_from(CreativeSession).where(CreativeSession.user_id == user_id))
-        or 0
-    )
-    session_ids = select(CreativeSession.id).where(CreativeSession.user_id == user_id)
-    batch_ids = select(GenerationBatch.id).where(GenerationBatch.user_id == user_id)
-    token_total = int(
-        db.scalar(
-            select(func.coalesce(func.sum(AgentRun.prompt_tokens + AgentRun.completion_tokens), 0)).where(
-                or_(AgentRun.session_id.in_(session_ids), AgentRun.batch_id.in_(batch_ids))
-            )
-        )
-        or 0
-    )
-    failed_task_count = int(
-        db.scalar(
-            select(func.count())
-            .select_from(GenerationBatch)
-            .where(GenerationBatch.user_id == user_id, GenerationBatch.status == "failed")
-        )
-        or 0
-    )
-    return {
-        "image_count": image_count,
-        "session_count": session_count,
-        "token_total": token_total,
-        "failed_task_count": failed_task_count,
-        "stats_available": True,
-    }
+    """单用户统计：与列表共用批量聚合口径。"""
+    return build_user_stats(db, [user_id])[user_id]
 
 
-def _user_payload(db: Session, user: User) -> dict:
+def _user_payload(db: Session, user: User, stats: dict | None = None) -> dict:
     return {
         "user_id": user.id,
         "username": user.username,
         "display_name": user.display_name,
         "roles": [{"code": r.code, "name": r.name} for r in user.roles],
         "status": user.status,
-        "stats": _user_stats(db, user.id),
+        "stats": stats if stats is not None else _user_stats(db, user.id),
         "last_login_at": to_iso(user.last_login_at),
         "created_at": to_iso(user.created_at),
         "updated_at": to_iso(user.updated_at),
@@ -204,9 +165,10 @@ def list_users(
             .limit(page_size)
         )
     )
+    stats_map = build_user_stats(db, [u.id for u in users])
     return ok(
         {
-            "items": [_user_payload(db, u) for u in users],
+            "items": [_user_payload(db, u, stats_map[u.id]) for u in users],
             "total": total,
             "page": page,
             "page_size": page_size,
