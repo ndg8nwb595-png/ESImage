@@ -8,8 +8,10 @@ from datetime import datetime, timezone
 import jwt
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 
 from app.core.config import settings
+from app.core.database import get_db
 from app.models import AuditLog, User
 
 LOGIN_URL = "/api/v1/auth/login"
@@ -143,6 +145,39 @@ def test_login_validation(client, payload, expected_code, expected_message):
     body = response.json()
     assert body["code"] == expected_code
     assert body["message"] == expected_message
+    assert body["data"] is None
+
+
+@pytest.mark.parametrize("remember_me", ["yes", 1, "true"])
+def test_remember_me_must_be_boolean(client, remember_me):
+    print(f"[测试] remember_me 传入非布尔值 {remember_me!r}，应返回 10003")
+    response = client.post(
+        LOGIN_URL,
+        json={"username": "demo_user", "password": "Demo1234", "remember_me": remember_me},
+    )
+    assert response.status_code == 400
+    body = response.json()
+    assert body["code"] == 10003
+    assert body["message"] == "参数格式错误"
+    assert body["data"] is None
+
+
+def test_database_error_returns_50002(client):
+    print("[测试] 模拟数据库异常，校验统一返回 500 + 50002")
+    token = _login(client).json()["data"]["token"]
+
+    def broken_db():
+        raise OperationalError("SELECT 1", None, Exception("模拟数据库不可用"))
+
+    client.app.dependency_overrides[get_db] = broken_db
+    try:
+        response = client.get(ME_URL, headers=_auth_headers(token))
+    finally:
+        client.app.dependency_overrides.clear()
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["code"] == 50002
     assert body["data"] is None
 
 

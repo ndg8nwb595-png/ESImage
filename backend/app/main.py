@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.response import ApiError, error_body
 from app.modules.auth.router import router as auth_router
@@ -47,6 +48,13 @@ async def handle_validation_error(request: Request, exc: RequestValidationError)
     if missing:
         return JSONResponse(status_code=400, content=error_body(10002, "缺少必填参数"))
     return JSONResponse(status_code=400, content=error_body(10003, "参数格式错误"))
+
+
+@app.exception_handler(SQLAlchemyError)
+async def handle_database_error(request: Request, exc: SQLAlchemyError) -> JSONResponse:
+    """数据库异常 -> 500 + 50002（接口文档 §4 错误码表）。"""
+    logger.exception("数据库异常: %s", exc)
+    return JSONResponse(status_code=500, content=error_body(50002, "系统繁忙，请稍后重试"))
 
 
 @app.exception_handler(Exception)

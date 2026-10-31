@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, StrictBool
 
 
 class LoginRequest(BaseModel):
@@ -15,4 +15,5 @@ class LoginRequest(BaseModel):
 
     username: str | None = None
     password: str | None = None
-    remember_me: bool = False
+    # 接口文档规定为 boolean；StrictBool 避免 "yes"/1 等值被宽松转换为 true
+    remember_me: StrictBool = False
