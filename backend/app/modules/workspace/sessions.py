@@ -11,7 +11,7 @@ from collections.abc import Iterator
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -21,6 +21,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal, get_db
 from app.core.deps import AuthContext
 from app.core.response import ApiError, ok
+from app.modules.contract.pagination import PageParams, pagination, paginated_response
 from app.models.workspace import AgentRun, ChatMessage, CreativeSession, GenerationBatch
 from app.modules.chat.agents import (
     ChatParams,
@@ -134,8 +135,7 @@ def list_sessions(
 @router.get("/sessions/{session_id}/messages")
 def list_messages(
     session_id: int,
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page: PageParams = Depends(pagination),
     auth: AuthContext = Depends(require_permission("user.workspace")),
     db: Session = Depends(get_db),
 ) -> dict:
@@ -158,8 +158,8 @@ def list_messages(
             select(ChatMessage)
             .where(ChatMessage.session_id == session.id)
             .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
+            .offset(page.offset)
+            .limit(page.page_size)
         )
     )
     rows.reverse()
@@ -179,7 +179,7 @@ def list_messages(
         }
         for message in rows
     ]
-    return ok({"items": items, "total": total, "page": page, "page_size": page_size})
+    return ok(paginated_response(items, total, page))
 
 
 def _find_duplicate(
