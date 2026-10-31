@@ -419,4 +419,4 @@
   1. `frontend/src/app/App.tsx` 给 `<AntdApp>` 显式加 `style={{ height: '100%' }}`，让 `#root` 的 100% 高度传导到 Layout。
   2. `frontend/src/modules/workspace/workspace.css` 把 `.workspace` 的 `height:100%` 改为 `flex:1`，作为 `Layout.Content` 的 flex 子项占满剩余高度。
 - 验证：2048×898 与浏览器当前视口下 `document.scrollHeight === innerHeight`，输入框底边与视口底边对齐；聊天消息区、右侧参数区各自内部滚动；选择会话后发送一条消息，SSE 返回 200，消息数 2→4；`npm run build`（tsc + vite）通过；`npm test` 4 passed；控制台仅剩 React Router future flag 警告。
-- 未推送、未合并 `main`，等待用户确认。
+- 用户确认“推后合”：分支 `fix/workspace-chat-visible` 已推送；`main` 以 `--ff-only` 从 22fa754 快进到 96209f6 并推送，远程已更新。

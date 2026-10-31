@@ -408,7 +408,7 @@
 | 布局回归验证 | 完成 | 2048×898/当前窗口下 `scrollHeight === innerHeight`，输入框贴底可见 |
 | 聊天功能回归 | 完成 | 选择会话后发送消息，SSE 200，消息正常追加 |
 | 构建与测试 | 完成 | `npm run build` 通过；`npm test` 4 passed |
-| 分支 | 已创建 | `fix/workspace-chat-visible`；未推送、未合并 |- 已确认范围：只做后端；重命名、软删除、消息状态、轻链路、上下文、需求摘要、需求变化提示、`agent_runs` 明细。
+| 分支与合并 | 完成 | `fix/workspace-chat-visible` 已推送；`main` 以 `--ff-only` 快进到 `96209f6` 并推送 |- 已确认范围：只做后端；重命名、软删除、消息状态、轻链路、上下文、需求摘要、需求变化提示、`agent_runs` 明细。
 - 明确不做：`POST /sessions`、会话恢复、取消接口、`agent_runs` 查询、消息搜索/导出、管理端聊天、聊天触发生图、真实内容审核；生图 `doubao-seedream-5-0-pro-260628` 属于 4 号，3 号不调用。
 - 环境：复用 docker `esimage-postgres`（55433）；8001 跑 3 号服务；chrome-devtools MCP 已验证 Swagger UI 与 OpenAPI。## 2026-10-31 会话 16：4 号生图任务与结果后端最小 demo（代码实现）
 
