@@ -61,6 +61,12 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8010
 | `DOUBAO_MODERATION_MODEL` | 是 | 生成图内容审核模型，默认 `doubao-seed-2-1-lite-260915` |
 | `BATCH_TIMEOUT_SECONDS` | 否 | 整批超时，默认 `1800` |
 | `FONT_PATH` | 否 | 中文字体路径；留空时自动查找系统字体 |
+| `STORAGE_BACKEND` | 否 | `local` / `minio`；`.env.example` 默认 `minio` |
+| `MINIO_ENDPOINT` | 否 | Docker MinIO 地址，默认 `127.0.0.1:9002` |
+| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | 否 | MinIO 访问密钥（与 docker-compose 一致） |
+| `MINIO_BUCKET` | 否 | 默认 `esimage` |
+| `MINIO_SECURE` | 否 | 本地默认 `false` |
+| `MODEL_CONFIG_ENCRYPTION_KEY` | 是 | base64 编码的 32 字节密钥；用于模型配置加密 |
 | `APP_ENV` | 否 | 测试环境设为 `test` 才允许 fake 模型与故障注入 |
 | `GENERATION_MODEL_PROVIDER` | 否 | 默认 `doubao`；仅 `APP_ENV=test` 可用 `fake` |
 
@@ -71,6 +77,15 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8010
 - 需在火山方舟控制台开通 `DOUBAO_IMAGE_MODEL` 对应的 Seedream 模型。
 - 若账号开启「安全体验模式」，额度用尽后会返回 429 `SetLimitExceeded`，需在控制台调整或关闭该模式。
 - Seedream 5.0 Pro 不接受 `sequential_image_generation` / `stream` 参数，适配层只发送各版本通用的最小参数集。
+
+### 2.2 对象存储
+
+- `docker compose up -d` 会启动 `esimage-minio`（宿主 9002/9003）并初始化 `esimage` 桶与
+  `uploads/ generated/ thumbnails/ archive/ exports/ templates/ materials/ avatars/` 前缀。
+- `.env` 中设置 `STORAGE_BACKEND=minio` 与 `MINIO_*` 后，上传图、生成图、缩略图、模板/素材种子
+  都通过 `app/modules/workspace/storage.py` 的统一门面读写；本地后端仍保留 `storage/` 目录。
+- 4 号 generation 的预览/下载/缩略图统一使用 `media_response` / `read_image_bytes`，不直接依赖本地文件路径。
+- 首次切换 MinIO 后执行一次 `python scripts/seed.py`，把模板/素材占位对象上传到桶内。
 
 ## 3. 演示账号
 
@@ -149,8 +164,9 @@ TEST_DB_NAME=esimage_generation_test python -m pytest
 
 ## 7. 范围与限制
 
-- 本文的“最小 demo”主要指 4 号生图链路：FastAPI `BackgroundTasks` + 本地目录存储 + 建表/幂等种子。
-- 主分支另有 10 号 Alembic 数据底座、11 号 Celery/Redis/MinIO 运维基线；4 号 demo 不依赖它们，正式部署可切换。
+- 4 号生图链路使用 FastAPI `BackgroundTasks` + 统一对象存储门面（`STORAGE_BACKEND=local` 或 `minio`）+ 建表/幂等种子。
+- 本地开发默认 Docker MinIO（API 9002 / 控制台 9003）；测试强制 `STORAGE_BACKEND=local`，不依赖真实 MinIO。
+- 主分支另有 10 号 Alembic 数据底座、11 号 Celery/Redis 运维基线；4 号 demo 可按需切换。
 - 生成配置（模板/素材/尺寸）用户端只读；后台维护入口在 `/api/v1/admin/templates|materials|sizes`。
 - 整组 ZIP 与 `manifest.csv` 复用 5 号历史模块实现，4 号 `/batches/{id}/download` 直接使用同一契约。
 - 只审核生成图，不审核上传商品图。

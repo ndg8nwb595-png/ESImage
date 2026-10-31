@@ -249,3 +249,7 @@
 - **并行 agent 重建共享容器会清掉模块库**：本次 `esimage-postgres` 重建后 `esimage_generation` 消失，登录 500；先查 `pg_database` 再排查代码。
 - **共享容器上的 MinIO 端口不是默认 9000/9001**：本项目用 9002（API）/9003（控制台），因为 9000/9001 被其他项目占用。
 - **存储迁移期间不要在分支上抢先改适配层**：等对方的 `feat/minio-storage-local` 合并后 rebase，再统一切到 `get_storage()`，避免两套实现冲突。
+- **MinIO 切换后要重新 seed**：模板/素材占位文件在本地目录里，不会自动出现在桶里；执行 `python scripts/seed.py` 上传。
+- **不要把 `storage.path()` 用在 MinIO 后端**：它只对 local 有效；统一用 `media_response` 或 `storage.read_bytes`。
+- **测试强制 local**：conftest 设置 `STORAGE_BACKEND=local`，所以本地 `.env` 用 minio 不影响 pytest；真实 curl 才走 MinIO。
+- **主分支新增启动必填 `MODEL_CONFIG_ENCRYPTION_KEY`**：缺了会启动失败，和豆包 Key 一样要写进 `.env`。

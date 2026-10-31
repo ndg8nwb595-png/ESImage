@@ -425,3 +425,10 @@
 - 共享存储将由并行 agent 统一改为 Docker MinIO（`STORAGE_BACKEND=minio`，宿主 9002）。
 - 4 号 generation 的存储落点最终应改为 `app.modules.data.storage.get_storage()`，不再直接使用 `app.core.storage` / `workspace.storage`；在对方分支合并前不改，避免冲突。
 - 数据库与对象存储都是并行 agent 共享的本地基础设施；容器重建会丢失模块库，验收前需重新建库/种子。
+
+### 会话 18：存储门面共识
+
+- 业务文件统一走 `app.modules.workspace.storage.storage`（local/MinIO 门面）；generation 不再自建存储适配层。
+- 媒体响应统一 `workspace.service.media_response`（本地 FileResponse / MinIO 缓冲 Response）；归档件统一 `read_image_bytes`。
+- 测试强制 `STORAGE_BACKEND=local`；真实联调使用 `.env` 的 MinIO（9002）与桶 `esimage`。
+- `MODEL_CONFIG_ENCRYPTION_KEY`（或 `ENCRYPTION_KEY`）是主分支新增的启动必填项，本地 `.env` 必须配置。

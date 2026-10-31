@@ -384,3 +384,11 @@
 - 用户选择：**等 MinIO 分支合并后再适配**；4 号 generation 暂保持本地 `core/storage` / `workspace.storage`，不合并 main、不提前改存储。
 - 待办：MinIO 分支合入 main 后，rebase 本分支，把 generation 的保存/读取切到共享 `app.modules.data.storage.get_storage()`；再补真实重生成验收与合并 main。
 - 已推送分支：`feat/generation-backend-demo` @ `ad1f513`；main 最新为 3878e33（8 号聊天记录），尚未包含 MinIO 迁移。
+
+### 会话 18：MinIO 统一存储接入与真实验收
+
+- 并行 agent 的 `feat/minio-storage-local` 已合入 main（a21dc5a）；`workspace/storage.py` 变为统一存储门面，`workspace.service.media_response` 统一 local/MinIO 媒体响应。
+- 4 号 generation 适配：删除 `app/core/storage.py`；改为 `app.modules.workspace.storage.storage`；pipeline 上传图/素材读取改用 `storage.read_bytes`；thumbnail 改用 `media_response`；预览/下载热数据走 `media_response`、归档走 `read_image_bytes`；模板缩略图同样走 `media_response`。
+- 本地 `.env` 增加 `STORAGE_BACKEND=minio`、`MINIO_*`（9002）与 `MODEL_CONFIG_ENCRYPTION_KEY`；测试 conftest 强制 local。
+- 验证：全量 pytest **191 passed（2 skipped）**；替身 curl 在 local 与 MinIO 后端均全接口通过；MinIO 真实验收：fake 全套 6/6 + 真实重生成新图 success，批次回到 completed 6/6，单张下载与 ZIP 均 200。
+- 分支已适配 MinIO，准备提交并合并 main。

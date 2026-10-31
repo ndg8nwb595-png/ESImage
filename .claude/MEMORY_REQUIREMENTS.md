@@ -466,3 +466,15 @@
 | 4 号 generation 存储适配 | 待办 | 等该分支合并后 rebase，改用共享 `get_storage()` |
 | 合并 main | 暂缓 | 用户选择等 MinIO 分支合并后再处理 |
 | 真实重生成验收 | 暂缓 | 共享库重建导致批次 48 丢失；待存储稳定后重跑 |
+
+### 会话 18：MinIO 适配
+
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| generation 存储切统一门面 | 完成 | `workspace.storage` + `media_response` + `read_image_bytes` |
+| 删除本地存储适配层 | 完成 | `app/core/storage.py` 删除 |
+| 本地 env | 完成 | MinIO 9002 + 加密密钥 |
+| 全量测试 | 完成 | 191 passed（2 skipped） |
+| 替身 curl（local/MinIO） | 完成 | 均全接口通过 |
+| 真实 MinIO 重生成 | 完成 | fake 全套 6/6 + 真实重生成 success；下载/ZIP 200 |
+| 合并 main | 待做 | 真实验收通过后合并 |

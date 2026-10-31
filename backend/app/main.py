@@ -20,7 +20,6 @@ from app.modules.contract.openapi import customize_openapi
 from app.modules.data.storage import ObjectNotFound, StorageError
 from app.modules.auth.router import router as auth_router
 from app.modules.chat.router import router as chat_router
-from app.modules.contract.openapi import customize_openapi
 from app.modules.generation.composition import validate_font
 from app.modules.generation.doubao import validate_model_settings
 from app.modules.generation.router import router as generation_router

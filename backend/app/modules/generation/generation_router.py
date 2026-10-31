@@ -5,7 +5,7 @@ from __future__ import annotations
 from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -14,7 +14,6 @@ from app.core.common import require_any_permission
 from app.core.database import get_db
 from app.core.deps import AuthContext
 from app.core.response import ApiError, ok
-from app.core.storage import storage
 from app.models.workspace import CreativeSession, GeneratedImage, GenerationBatch
 from app.modules.generation.pipeline import (
     run_full_pipeline,
@@ -49,7 +48,7 @@ from app.modules.generation.service import (
     batch_payload,
 )
 from app.modules.generation.state import transition_batch, transition_image
-from app.modules.workspace.service import read_image_bytes
+from app.modules.workspace.service import media_response, read_image_bytes
 
 router = APIRouter(tags=["generation"])
 
@@ -535,15 +534,13 @@ def get_image_content(
     image = get_owned_image(db, auth.user.id, image_id)
     if image.status == "superseded":
         raise ApiError(404, 30014, "文件不存在")
-    data = read_image_bytes(image)
-    return Response(
-        content=data,
-        media_type="image/png",
-        headers={
-            "Cache-Control": "private, max-age=300",
-            "Content-Disposition": "inline",
-        },
-    )
+    headers = {
+        "Cache-Control": "private, max-age=300",
+        "Content-Disposition": "inline",
+    }
+    if image.archived_at is None and image.file_path:
+        return media_response(image.file_path, media_type="image/png", headers=headers)
+    return Response(content=read_image_bytes(image), media_type="image/png", headers=headers)
 
 
 @router.get("/images/{image_id}/thumbnail")
@@ -551,16 +548,13 @@ def get_image_thumbnail(
     image_id: int,
     auth: AuthContext = Depends(require_any_permission("user.generate", "user.history")),
     db: Session = Depends(get_db),
-) -> FileResponse:
+) -> Response:
     """结果网格缩略图；与 2/5 号 demo 的路径契约保持一致。"""
     image = get_owned_image(db, auth.user.id, image_id)
     if image.status == "superseded" or not image.thumbnail_path:
         raise ApiError(404, 30014, "文件不存在")
-    path = storage.path(image.thumbnail_path)
-    if not path.is_file():
-        raise ApiError(404, 30014, "文件不存在")
-    return FileResponse(
-        path,
+    return media_response(
+        image.thumbnail_path,
         media_type="image/webp",
         headers={
             "Cache-Control": "private, max-age=3600",
@@ -574,7 +568,7 @@ def download_image(
     image_id: int,
     auth: AuthContext = Depends(require_permission("user.history")),
     db: Session = Depends(get_db),
-) -> FileResponse:
+) -> Response:
     """下载单张正式图 PNG；示例图确认前、失败图、取消半成品不可下载。"""
     image = get_owned_image(db, auth.user.id, image_id)
 
@@ -588,14 +582,12 @@ def download_image(
     batch = db.get(GenerationBatch, image.batch_id)
     if batch is None or batch.status not in ("completed", "partially_failed"):
         raise ApiError(409, 30005, "当前图片不可下载")
-    data = read_image_bytes(image)
     filename = image_download_filename(batch, image)
-    return Response(
-        content=data,
-        media_type="image/png",
-        headers={
-            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}",
-            # 5 号历史下载口径：不允许客户端缓存
-            "Cache-Control": "no-store",
-        },
-    )
+    headers = {
+        "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}",
+        # 5 号历史下载口径：不允许客户端缓存
+        "Cache-Control": "no-store",
+    }
+    if image.archived_at is None and image.file_path:
+        return media_response(image.file_path, media_type="image/png", headers=headers)
+    return Response(content=read_image_bytes(image), media_type="image/png", headers=headers)

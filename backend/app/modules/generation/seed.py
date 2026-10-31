@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.storage import storage
+from app.modules.workspace.storage import storage
 from app.models.config import (
     MaterialAsset,
     ModelConfig,

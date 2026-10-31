@@ -1327,3 +1327,12 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 - 未修改 generation 存储代码；按用户选择等待 `feat/minio-storage-local` 合并后再适配。
 - 重建本地库 `esimage_generation` / `esimage_generation_test` 并执行建表/种子；真实批次 48 数据随共享容器重建丢失。
 - 清理临时验收文件（`_regen_probe.py`、登录/服务探针日志）。
+
+### 会话 18：MinIO 存储适配
+
+- `backend/app/modules/generation/pipeline.py`：改用 `workspace.storage.storage`；上传图/素材用 `read_bytes`。
+- `backend/app/modules/generation/generation_router.py`：热数据预览/下载/缩略图走 `media_response`；归档走 `read_image_bytes`。
+- `backend/app/modules/generation/config_router.py`：模板缩略图走 `media_response`。
+- `backend/app/modules/generation/seed.py`：使用统一门面；切换 MinIO 后 seed 会把模板/素材上传到桶。
+- 删除 `backend/app/core/storage.py`；`backend/app/main.py` 清理重复导入。
+- `backend/README.md`：补充 MinIO 环境变量与对象存储说明。

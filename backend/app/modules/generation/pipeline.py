@@ -17,7 +17,8 @@ from sqlalchemy import select
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.media import fit_to_size, make_thumbnail_webp, to_png_bytes
-from app.core.storage import storage
+from app.modules.data.storage import ObjectNotFound, StorageError
+from app.modules.workspace.storage import storage
 from app.models.workspace import AgentRun, GeneratedImage, GenerationBatch, UploadedAsset
 from app.modules.generation import agents, config_service, service
 from app.modules.generation.composition import (
@@ -222,10 +223,8 @@ def _upload_files(db, batch: GenerationBatch) -> list[bytes]:
         if row is None:
             continue
         try:
-            path = storage.path(row.file_path)
-            if path.is_file():
-                files.append(path.read_bytes())
-        except ValueError:
+            files.append(storage.read_bytes(row.file_path))
+        except (ObjectNotFound, StorageError):
             continue
     return files
 
@@ -240,10 +239,8 @@ def _material_files(ctx: agents.AgentContext, reference_ids: list[int]) -> list[
         if material is None:
             continue
         try:
-            path = storage.path(material["file_path"])
-            if path.is_file():
-                files.append(path.read_bytes())
-        except ValueError:
+            files.append(storage.read_bytes(material["file_path"]))
+        except (ObjectNotFound, StorageError):
             continue
     return files
 
