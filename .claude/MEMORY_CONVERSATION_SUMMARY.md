@@ -206,4 +206,5 @@
 - 新增 `backend/tests/test_workspace.py`（20 个用例）、`backend/scripts/curl_smoke.sh`、`backend/README.md`、workspace 模块 README。
 - 验证：`TEST_DB_NAME=esimage_workspace_test python -m pytest` 全量 51 项通过；curl 脚本逐条调通全部工作台接口（SSE、上传、示例生成、确认全套、预览、下载、软删除、权限与参数错误）。
 - Windows Git Bash 坑：`curl -d '{"中文":...}'` 会被终端按本地编码处理导致后端 400；脚本改为 Python 生成 UTF-8 JSON 文件并用 `curl --data-binary @文件`。
-- 收尾：独立审查、commit / push、merge 到 main 与记忆文档更新见后续记录。
+- 收尾：独立审查发现并发幂等、OOM 边界、SSE 断线、校验文案等问题，已全部修复并复测；提交 `7595e31`，强制更新功能分支后 `--ff-only` 合并到 `main` 并推送。
+- 最终验证：全量 `pytest` **59 passed**；`curl_smoke.sh` 逐条调通全部工作台接口。

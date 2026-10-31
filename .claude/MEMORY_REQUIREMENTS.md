@@ -243,4 +243,5 @@
 | 预览与单张下载（ticket 07） | 完成 | `GET /images/{id}/content`、`/thumbnail`、`/download`；示例图下载 409 `30005`；文件名规则与非法字符替换 |
 | curl 验收脚本 | 完成 | `backend/scripts/curl_smoke.sh` 临时起服务并逐条调用全部接口；UTF-8 JSON 文件 + `--data-binary` |
 | 测试 | 完成 | `tests/test_workspace.py` 20 个用例；全量 `pytest` 51 passed |
-| 独立审查 | 进行中 | 已启动只读审查 agent，等待结果后修复并复测 |
+| 独立审查 | 完成 | 只读审查 agent 发现并发幂等、OOM 边界、SSE 断线、校验文案等问题；已修复并复测 |
+| 提交与合并 | 完成 | 提交 `7595e31 feat: 实现创作工作台后端最小 demo 与 curl 验收`；推送功能分支并 `--ff-only` 合并到 `main`，远程 `main` 已更新 |

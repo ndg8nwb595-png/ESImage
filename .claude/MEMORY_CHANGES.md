@@ -676,7 +676,7 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 
 ### 验证
 
-- `TEST_DB_NAME=esimage_workspace_test PYTHONPATH=. python -m pytest -q` → **55 passed**。
+- `TEST_DB_NAME=esimage_workspace_test PYTHONPATH=. python -m pytest -q` → **59 passed**。
 - `python -m compileall -q app scripts` → 通过。
 - `bash scripts/curl_smoke.sh`（`DATABASE_URL=...55433/esimage_workspace`）逐条通过：
   - 登录 / `/auth/me` / `/auth/logout` 200；
@@ -706,3 +706,11 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 - `chrome-devtools` MCP 连接超时，未使用浏览器验证；本次仅后端。
 - 未配置真实文本模型与豆包生图，聊天与生图为演示桩/占位图。
 - SSE 心跳 `ping` 未实现；归档下载分支未实现；`superseded` 图片默认不返回。以上均为最小 demo 取舍。
+
+### 提交与合并
+
+- 提交 `7595e31 feat: 实现创作工作台后端最小 demo 与 curl 验收`（28 文件，+3654）。
+- 远端 `main` 在此期间前进到 `a476ac4`；功能分支 rebase 到最新 `main`，解决 `.claude/MEMORY_CHANGES.md`、`.claude/MEMORY_TIPS.md` 两处记忆文档冲突（双方内容全部保留）。
+- rebase 后全量 `pytest` **59 passed**；`git push --force-with-lease origin feat/workspace-backend-demo` 成功。
+- `git merge --ff-only feat/workspace-backend-demo` 合并到 `main`，推送 `a476ac4..7595e31` 成功（GitHub 443 直连超时，使用 `git -c http.curloptResolve=github.com:443:140.82.112.3` 临时固定 IP）。
+- 未提交 `backend/.env`、`backend/storage/`、`backend/.curl_tmp/` 等本地文件（均已在 `.gitignore`）。
