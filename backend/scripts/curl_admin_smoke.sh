@@ -115,7 +115,8 @@ trap cleanup EXIT
 echo "[curl] 等待服务启动……"
 READY=0
 for _ in $(seq 1 60); do
-  if curl -sS -o /dev/null "http://127.0.0.1:$PORT/openapi.json"; then
+  # 9 号契约把 OpenAPI 移到 /api/openapi.json；-f 保证 404 不会误判为就绪
+  if curl -fsS -o /dev/null "http://127.0.0.1:$PORT/api/openapi.json"; then
     READY=1
     break
   fi

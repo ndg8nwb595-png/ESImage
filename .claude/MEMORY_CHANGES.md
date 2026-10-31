@@ -1029,3 +1029,5 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
    - `test_selftest_pure`：monkeypatch 了不存在的 `ops_tasks.delay_ms`。
    按「不触碰不相关内容」未修改，已在汇报中标注。
 8. curl 复验：40 项 HTTP + 17 项业务码检查 0 失败；OpenAPI 36 条 `/api/v1/admin/*` 路由，无 `/admin/admin` 双重前缀。
+9. chrome-devtools MCP 已连接并打开 `http://127.0.0.1:8016/api/docs`：Swagger UI 展示 `admin-accounts`（11 个）、`admin-audit`（2 个）等分组，控制台无 error/warn；截图已留存。
+10. 冒烟脚本就绪探测从 `/openapi.json` 改为 `/api/openapi.json` 并加 `-f`（9 号契约迁移后旧路径 404，curl 仍返回 0 会误判）。
