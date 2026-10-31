@@ -298,3 +298,21 @@
 - 已确认范围：只做后端；重命名、软删除、消息状态、轻链路、上下文、需求摘要、需求变化提示、`agent_runs` 明细。
 - 明确不做：`POST /sessions`、会话恢复、取消接口、`agent_runs` 查询、消息搜索/导出、管理端聊天、聊天触发生图、真实内容审核；生图 `doubao-seedream-5-0-pro-260628` 属于 4 号，3 号不调用。
 - 环境：复用 docker `esimage-postgres`（55433）；8001 跑 3 号服务；chrome-devtools MCP 已验证 Swagger UI 与 OpenAPI。
+
+## 2026-10-31 会话 17：6 号账号与权限后端实现（完成）
+
+| 需求 | 状态 | 实现手段 |
+| --- | --- | --- |
+| 模块骨架与分支 | 完成 | `feat/admin-accounts-backend-demo`；`admin/accounts`、`admin/audit` README；已推送并 `--ff-only` 合并 `main` |
+| 路由基线修复 | 完成 | `admin/router.py` 从 `xxx.router` 导入 router 对象；汇总路由加 `prefix="/admin"` |
+| 23 权限点与 demo_super | 完成 | `auth/seed.py`：23 权限、user 4、admin 13、super_admin 不写 `role_permissions`、新增 `demo_super` |
+| 超管全量权限与鉴权顺序 | 完成 | `core/deps.py`：超管读全部权限码；账号状态先于 `token_version` |
+| 用户列表/新建/详情/编辑/重置密码/禁用启用/删除恢复 | 完成 | 13 个接口对齐 6 号接口文档的字段、错误码、账号边界与最后超管保护 |
+| 角色与权限点 | 完成 | 固定三角色顺序、超管只读、最低权限、超管专属拒绝、返回角色对象、`role.update` 审计 |
+| 操作日志 | 完成 | 文档参数 `operator/start_time/end_time` 与前端旧参数双兼容；响应同时含 `log_id` 与 `id` 等；30019 |
+| 失败审计 | 完成 | 账号/角色写操作失败记录 `result=failed` 与 `detail.reason`，独立事务提交 |
+| 测试与 curl | 完成 | 新增 13 个 pytest 用例；全量 **98 passed**；`curl_admin_smoke.sh` 13 接口全部通过（脚本自动建表/种子） |
+| 代码审查修复 | 完成 | 已删除账号禁止 PATCH 绕过、编辑边界按值判断、纯空格密码拒绝、种子收敛权限目录、404 失败审计、统计批量聚合、无 body 返回 10002 |
+| 统计口径 | 完成（用户确认） | 内容表已接入，返回真实统计且 `stats_available=true` |
+| 权限目录 | 完成（用户确认） | 名称、类型、分组按 6 号文档；分组只有用户端/管理后台 |
+| Chrome MCP | 部分完成 | MCP 工具已加载；浏览器 profile 被其他 agent 占用时无法新建页面，改用 OpenAPI + curl 验证 |

@@ -4,14 +4,17 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.modules.admin.accounts import router as accounts_router
-from app.modules.admin.assets import router as assets_router
-from app.modules.admin.audit import router as audit_router
-from app.modules.admin.content import router as content_router
-from app.modules.admin.dashboard import router as dashboard_router
-from app.modules.admin.prompts import router as prompts_router
+# 注意：各子模块的 __init__.py 为空，必须从 xxx.router 导入 router 对象，
+# 否则导入到的是子模块本身，FastAPI 注册时会抛 AttributeError。
+from app.modules.admin.accounts.router import router as accounts_router
+from app.modules.admin.assets.router import router as assets_router
+from app.modules.admin.audit.router import router as audit_router
+from app.modules.admin.content.router import router as content_router
+from app.modules.admin.dashboard.router import router as dashboard_router
+from app.modules.admin.prompts.router import router as prompts_router
 
-router = APIRouter()
+# 6 号接口文档要求管理后台统一挂在 /api/v1/admin 下
+router = APIRouter(prefix="/admin")
 router.include_router(dashboard_router)
 router.include_router(accounts_router)
 router.include_router(content_router)

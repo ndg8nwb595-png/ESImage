@@ -96,11 +96,25 @@ def test_dual_role_account_has_both_permission_groups(client):
     user = response.json()["data"]["user"]
     assert user["roles"] == ["admin", "user"]
     assert set(user["permissions"]) == {
+        # 用户端 4 个
         "user.workspace",
         "user.generate",
         "user.history",
         "user.profile",
+        # 管理员默认 13 个
         "admin.dashboard.view",
+        "admin.tokens.view",
+        "admin.accounts.view",
+        "admin.accounts.create",
+        "admin.accounts.edit",
+        "admin.accounts.reset_password",
+        "admin.accounts.disable",
+        "admin.accounts.delete",
+        "admin.content.view",
+        "admin.assets.view",
+        "admin.assets.edit",
+        "admin.prompts.view",
+        "admin.prompts.edit",
     }
 
 

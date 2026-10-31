@@ -7,12 +7,13 @@ from dataclasses import dataclass
 
 import jwt
 from fastapi import Depends, Request
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.response import ApiError
 from app.core.security import decode_access_token
-from app.models.user import User
+from app.models.user import Permission, User
 
 
 @dataclass
@@ -28,19 +29,27 @@ def _role_codes(user: User) -> list[str]:
     return sorted(role.code for role in user.roles)
 
 
-def _permission_codes(user: User) -> list[str]:
+def _permission_codes(db: Session, user: User) -> list[str]:
+    """读取当前用户权限码。
+
+    6 号文档 §1.4：拥有 super_admin 角色时直接拥有全部权限码，不读取
+    role_permissions；其他角色取所分配角色在 role_permissions 中的并集。
+    """
+    if any(role.code == "super_admin" for role in user.roles):
+        return sorted(db.scalars(select(Permission.code)).all())
     codes = {permission.code for role in user.roles for permission in role.permissions}
     return sorted(codes)
 
 
 def get_current_auth(request: Request, db: Session = Depends(get_db)) -> AuthContext:
-    """按接口文档 §2.4 的顺序校验 token。
+    """按 6 号接口文档 §1.4 的顺序校验 token。
 
     1. 格式/签名 -> 20003
     2. exp -> 20002
     3. 用户存在 -> 20003
-    4. token_version 一致 -> 20003
-    5. status=active -> 20004
+    4. status=active -> 20004（账号状态先于 token_version，保证禁用/删除统一返回 20004）
+    5. token_version 一致 -> 20003
+    6. 读取角色与权限
     """
     authorization = request.headers.get("authorization")
 
@@ -69,7 +78,11 @@ def get_current_auth(request: Request, db: Session = Depends(get_db)) -> AuthCon
     if user is None:
         raise ApiError(401, 20003, "token 无效")
 
-    # 4. token_version 是否一致
+    # 4. 账号状态（先于 token_version）
+    if user.status != "active":
+        raise ApiError(403, 20004, "账号不可用")
+
+    # 5. token_version 是否一致
     try:
         token_version = int(payload.get("token_version", -1))
     except (TypeError, ValueError) as exc:
@@ -77,14 +90,10 @@ def get_current_auth(request: Request, db: Session = Depends(get_db)) -> AuthCon
     if token_version != user.token_version:
         raise ApiError(401, 20003, "token 无效")
 
-    # 5. 账号状态
-    if user.status != "active":
-        raise ApiError(403, 20004, "账号不可用")
-
     return AuthContext(
         user=user,
         roles=_role_codes(user),
-        permissions=_permission_codes(user),
+        permissions=_permission_codes(db, user),
     )
 
 

@@ -20,9 +20,14 @@
 
 | 文件 | 职责 |
 | --- | --- |
-| `router.py` | 路由、权限依赖、筛选参数与统一响应 |
-| `schemas.py` | 查询参数校验与响应序列化辅助 |
-| `service.py` | 条件查询、分页与日志对象序列化 |
+| `router.py` | 路由、权限依赖、筛选参数、条件查询、分页与响应序列化 |
+
+## 双兼容约定
+
+- 请求同时接受 6 号文档参数 `operator` / `start_time` / `end_time` 与前端已使用的
+  `keyword` / `created_from` / `created_to`。
+- 响应同时返回 `log_id` / `operator_user_id` / `operator_username` 与旧的
+  `id` / `user_id` / `username_snapshot`，避免破坏已合并的前端。
 
 ## 边界约定
 

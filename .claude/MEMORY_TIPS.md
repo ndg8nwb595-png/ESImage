@@ -138,3 +138,20 @@
 - **并行 agent 的测试库要隔离**：同设备多个克隆共用 55433 PostgreSQL 时，测试库默认名相同会互相清表；本仓库改用 `esimage_chat_test`，并用 `TEST_DB_NAME` 可覆盖。
 - **模型调用不要放在进程锁里**：真实模型时延会把所有工作台写操作串行化；本次把规划/商品理解调用放进 SSE 流内，锁只覆盖会话/用户消息/回复占位的创建。
 - **中文 JSON 在 Windows Git Bash 下用 `--data-binary @文件`**：Python 写 UTF-8 文件时不要用 `/tmp` 绝对路径（Python 与 Git Bash 的 `/tmp` 映射不同），用仓库内相对目录或 `$TEMP`。
+
+- **`from package import router` 可能导入子模块而不是 APIRouter**：当 `package/__init__.py` 为空且存在 `package/router.py` 时，拿到的是模块对象；FastAPI 注册会报 `_contains_router`。必须写 `from package.router import router`。
+- **汇总路由要显式加模块前缀**：子路由只写 `/users` 时，`include_router` 不带 prefix 会挂到 `/api/v1/users`；文档要求 `/api/v1/admin/users` 时，在汇总 `APIRouter(prefix="/admin")` 上统一加，避免逐个接口改。
+- **合并到 main 前先看远端是否已被并行 agent 推进**：`git fetch` 后对比 `origin/main` 的 `git log` 与 `git diff --stat`；本次 main 已包含同模块实现，直接重写会重复劳动，应先审计差距再补。
+- **超管权限不要依赖 `role_permissions` 行**：种子写入行会让「角色权限页不可编辑」和「角色即时全量授予」产生双份真相；鉴权层按角色返回全部权限码，种子不写超管行。
+- **鉴权顺序会决定错误码**：账号同时被禁用且 `token_version` 变化时，先查状态返回 20004，先查版本返回 20003；6 号文档要求状态优先，改顺序前先确认所有调用方。
+- **契约冲突优先做双兼容，而不是删旧字段**：已合并前端使用 `keyword/created_from` 与 `id/user_id`，6 号文档使用 `operator/start_time` 与 `log_id/operator_user_id`；两套都接受/返回，curl 与前端都不坏。
+- **失败审计要独立事务**：在业务事务里写失败日志会随异常回滚丢失；先 `rollback()`，再写日志并 `commit()`，最后抛业务异常，避免把未提交的字段改动一起提交。
+- **测试清理用户要先删审计日志**：`audit_logs.user_id` 是 RESTRICT 外键，测试账号登录过就会引用它；清理顺序为「审计日志 → user_roles → users」。
+- **ISO 时间放进 query string 要把 `+` 编码成 `%2B`**：`+08:00` 中的 `+` 会被服务端解析为空格，`fromisoformat` 直接失败；curl 脚本里用 `${var//+/%2B}` 预处理。
+- **浏览器 MCP 被其他 agent 占用时不要杀进程**：chrome-devtools 报 “browser is already running for profile” 时，先用 OpenAPI + curl 完成后端验收，避免影响同设备并行会话。
+- **PATCH 不能成为软删除的后门**：只校验「status 只能是 active/disabled」不够；已删除账号若允许 `PATCH status=active`，会得到 `deleted_at` 仍非空的可登录账号。编辑接口要显式拒绝 `status=deleted` 的目标。
+- **边界校验按“值变化”而不是“字段出现”**：前端编辑弹窗通常总是提交全部字段，按字段存在判断会把“只改显示名”误判为“改角色/状态”，导致 20007/20005。
+- **用户列表统计不要按行查**：每行 4 条聚合在 `page_size=100` 时约 400 条 SQL；用当前页 user_id 批量 group by，Token 用 `COALESCE(session.user_id, batch.user_id)` 避免重复归属。
+- **幂等种子也要收敛系统目录**：只“存在即跳过”会让改名/改分组永远不生效；权限点/角色这类系统元数据应更新，密码与角色权限关联才应保留。
+- **冒烟脚本要自包含**：默认连一个专用库时，脚本应先 `init_db + seed`，否则新环境按 README 跑会在登录时因表不存在返回 500。
+- **无 body 的 POST/PATCH 会被 FastAPI 返回 422**：需要文档约定的 10002 时，把请求模型设为可选并 `payload = payload or Model()`。

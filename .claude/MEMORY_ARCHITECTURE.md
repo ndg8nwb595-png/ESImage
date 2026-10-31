@@ -280,3 +280,23 @@
 - **环境**：复用 `esimage-postgres`（55433）；8000 被 1 号登录 demo 占用，3 号联调用 8001；chrome-devtools MCP 已用于 Swagger UI 验证。
 - **实现状态**：业务代码提交 `6e0c96c`，rebase 到 `4ea5d64` 后推送 `feat/agent-chat-backend-demo` 并 `--ff-only` 合并 `main`；全量 `pytest` **85 passed**；真实豆包联调通过。
 - **已知 demo 边界**：参数校验先于幂等重放（已删除上传图的极端重试会返回 30006）；真实模型措辞需联调抽检；接口不返回 usage 时 Token 记 0。
+
+## 管理后台-账号与权限后端实现约定（2026-10-31 用户确认）
+
+- **模块位置**：账号与角色放 `backend/app/modules/admin/accounts/`，操作日志放 `backend/app/modules/admin/audit/`；复用已有骨架，不新增顶层模块。
+- **路由前缀**：汇总路由 `backend/app/modules/admin/router.py` 使用 `APIRouter(prefix="/admin")`，`main.py` 挂 `/api/v1`；子模块 `__init__.py` 为空，必须从 `xxx.router` 导入 router 对象。
+- **种子**：`modules/auth/seed.py` 是 23 个权限点的唯一来源；`user` 4 个、`admin` 13 个、`super_admin` 不写 `role_permissions`；新增 `demo_super`。重复执行不覆盖已有数据。
+- **鉴权**：`core/deps.py` 中超管按角色即时授予全部权限码；校验顺序为签名 → 过期 → 用户存在 → 账号状态（20004）→ `token_version`（20003）→ 权限码（20005）。
+- **统计口径**：内容表已接入，用户统计返回真实值且 `stats_available=true`（用户选择，覆盖 6 号 demo 文档的 0/false 初值）。
+- **权限目录**：名称、类型、分组按 6 号接口文档；`group_name` 只有「用户端 / 管理后台」，角色管理页平铺展示。
+- **操作日志双兼容**：请求同时接受文档参数与前端旧参数；响应同时返回文档字段与旧字段，避免破坏已合并的前端。
+- **审计**：账号写操作必须带 `target_type=account`/`target_id=用户名`；角色权限带 `role`/角色 code；编辑记录 before/after；失败操作独立事务写 `result=failed` 与 `detail.reason`；不记录密码。
+- **本地环境**：复用并行 agent 的 `esimage-postgres`（55433）；本模块使用 `esimage_admin` 开发库、`esimage_admin_test` 测试库；8001 被 3 号占用，6 号 curl 用 8016。
+- **分支**：`feat/admin-accounts-backend-demo`；骨架先推送并 `--ff-only` 合并 `main`，业务代码验证后再合并。
+- **编辑边界按值判断**：前端编辑弹窗总是提交 `display_name/roles/status`；后端只在角色集合或状态值真正变化时触发 20007/20005，避免「原样提交」被误拦。
+- **已删除账号**：`PATCH /admin/users/{id}` 一律 409 `30018`，必须走 restore；禁止出现 `status=active` 但 `deleted_at` 非空的中间态。
+- **统计查询**：列表按当前页 user_id 批量聚合（4 条 SQL），详情复用同一函数；Token 归属优先 `session.user_id`，其次 `batch.user_id`。
+- **种子收敛**：权限点/角色名称、类型、分组、`is_super_only` 属于系统目录，重跑种子会更新；密码与 `role_permissions` 仍不覆盖。
+- **失败审计**：404 与账号/角色业务失败都写 `result=failed` + `detail.reason`；`require_permission` 的 20005 不另加未定义动作码，避免超出文档动作清单。
+- **无请求体**：新建/编辑/重置密码无 body 时返回 10002，而不是框架 422。
+- **冒烟脚本**：`curl_admin_smoke.sh` 自带建表与幂等种子，新环境可直接运行。

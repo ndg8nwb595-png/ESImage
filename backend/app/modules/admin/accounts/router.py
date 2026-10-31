@@ -1,4 +1,7 @@
-"""账号与权限：用户 CRUD、禁用/启用/软删除/恢复、角色与权限点（6 号 PRD 最小 demo）。"""
+"""账号与权限：用户 CRUD、禁用/启用/软删除/恢复、角色与权限点（6 号 PRD 最小 demo）。
+
+接口与错误码对齐 `docs/prd/6-管理后台-账号与权限/接口文档-账号与权限最小demo.md`。
+"""
 
 from __future__ import annotations
 
@@ -29,7 +32,7 @@ router = APIRouter(tags=["admin-accounts"])
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{4,20}$")
 
-# 允许的角色组合（1~2 个角色）
+# 允许的角色组合（1~2 个角色）；排序后比较，避免前端顺序影响结果
 VALID_ROLE_COMBOS = {
     ("user",),
     ("admin",),
@@ -37,6 +40,12 @@ VALID_ROLE_COMBOS = {
     ("admin", "user"),
     ("super_admin", "user"),
 }
+
+# 角色固定展示顺序：普通用户 -> 管理员 -> 超管
+ROLE_ORDER = {"user": 0, "admin": 1, "super_admin": 2}
+
+# 权限点分组顺序：用户端在前，管理后台在后
+GROUP_ORDER = {"用户端": 0, "管理后台": 1}
 
 
 def _roles_of(user: User) -> set[str]:
@@ -49,13 +58,6 @@ def _is_super(user: User) -> bool:
 
 def _role_objects(db: Session, codes: list[str]) -> list[Role]:
     return list(db.scalars(select(Role).where(Role.code.in_(codes))))
-
-
-def _get_target_user(db: Session, user_id: int) -> User:
-    user = db.get(User, user_id)
-    if user is None:
-        raise ApiError(404, 30017, "用户不存在")
-    return user
 
 
 def _validate_role_combo(roles: list[str]) -> tuple[str, ...]:
@@ -78,63 +80,100 @@ def _count_active_super(db: Session) -> int:
     )
 
 
-def _user_stats(db: Session, user_id: int) -> dict:
-    image_count = int(
-        db.scalar(
-            select(func.count())
-            .select_from(GeneratedImage)
-            .where(
-                GeneratedImage.user_id == user_id,
-                GeneratedImage.image_type == "final",
-                GeneratedImage.status == "success",
-            )
-        )
-        or 0
-    )
-    session_count = int(
-        db.scalar(select(func.count()).select_from(CreativeSession).where(CreativeSession.user_id == user_id))
-        or 0
-    )
-    session_ids = select(CreativeSession.id).where(CreativeSession.user_id == user_id)
-    batch_ids = select(GenerationBatch.id).where(GenerationBatch.user_id == user_id)
-    token_total = int(
-        db.scalar(
-            select(func.coalesce(func.sum(AgentRun.prompt_tokens + AgentRun.completion_tokens), 0)).where(
-                or_(AgentRun.session_id.in_(session_ids), AgentRun.batch_id.in_(batch_ids))
-            )
-        )
-        or 0
-    )
-    failed_task_count = int(
-        db.scalar(
-            select(func.count())
-            .select_from(GenerationBatch)
-            .where(GenerationBatch.user_id == user_id, GenerationBatch.status == "failed")
-        )
-        or 0
-    )
+def _empty_stats() -> dict:
     return {
-        "image_count": image_count,
-        "session_count": session_count,
-        "token_total": token_total,
-        "failed_task_count": failed_task_count,
+        "image_count": 0,
+        "session_count": 0,
+        "token_total": 0,
+        "failed_task_count": 0,
         "stats_available": True,
     }
 
 
-def _user_payload(db: Session, user: User) -> dict:
+def _stats_for_users(db: Session, user_ids: list[int]) -> dict[int, dict]:
+    """按 6 号接口文档 §2.4 批量聚合用户统计。
+
+    一次列表最多 4 条聚合 SQL，避免按行 N+1（page_size=100 时原实现约 400 条查询）。
+    内容表已接入，stats_available 固定为 true。
+    """
+    stats = {user_id: _empty_stats() for user_id in user_ids}
+    if not user_ids:
+        return stats
+
+    image_rows = db.execute(
+        select(GeneratedImage.user_id, func.count())
+        .where(
+            GeneratedImage.user_id.in_(user_ids),
+            GeneratedImage.image_type == "final",
+            GeneratedImage.status == "success",
+        )
+        .group_by(GeneratedImage.user_id)
+    )
+    for user_id, count in image_rows:
+        stats[user_id]["image_count"] = int(count)
+
+    session_rows = db.execute(
+        select(CreativeSession.user_id, func.count())
+        .where(CreativeSession.user_id.in_(user_ids))
+        .group_by(CreativeSession.user_id)
+    )
+    for user_id, count in session_rows:
+        stats[user_id]["session_count"] = int(count)
+
+    # Token 归属优先 session.user_id，其次 batch.user_id（与 7 号统计口径一致）
+    owner = func.coalesce(CreativeSession.user_id, GenerationBatch.user_id)
+    token_rows = db.execute(
+        select(owner, func.coalesce(func.sum(AgentRun.prompt_tokens + AgentRun.completion_tokens), 0))
+        .select_from(AgentRun)
+        .outerjoin(CreativeSession, CreativeSession.id == AgentRun.session_id)
+        .outerjoin(GenerationBatch, GenerationBatch.id == AgentRun.batch_id)
+        .where(owner.in_(user_ids))
+        .group_by(owner)
+    )
+    for user_id, total in token_rows:
+        if user_id in stats:
+            stats[user_id]["token_total"] = int(total or 0)
+
+    failed_rows = db.execute(
+        select(GenerationBatch.user_id, func.count())
+        .where(GenerationBatch.user_id.in_(user_ids), GenerationBatch.status == "failed")
+        .group_by(GenerationBatch.user_id)
+    )
+    for user_id, count in failed_rows:
+        stats[user_id]["failed_task_count"] = int(count)
+
+    return stats
+
+
+def _user_stats(db: Session, user_id: int) -> dict:
+    return _stats_for_users(db, [user_id])[user_id]
+
+
+def _user_payload(db: Session, user: User, stats: dict | None = None) -> dict:
     return {
         "user_id": user.id,
         "username": user.username,
         "display_name": user.display_name,
         "roles": [{"code": r.code, "name": r.name} for r in user.roles],
         "status": user.status,
-        "stats": _user_stats(db, user.id),
+        "stats": stats if stats is not None else _user_stats(db, user.id),
         "last_login_at": to_iso(user.last_login_at),
         "created_at": to_iso(user.created_at),
         "updated_at": to_iso(user.updated_at),
         "deleted_at": to_iso(user.deleted_at),
     }
+
+
+def _catalog_sorted(permissions: list[Permission]) -> list[Permission]:
+    """按 6 号文档要求：先分组（用户端、管理后台），再按权限码排序。"""
+    return sorted(permissions, key=lambda p: (GROUP_ORDER.get(p.group_name or "", 99), p.code))
+
+
+def _permission_codes_of(role: Role, catalog: list[Permission]) -> list[str]:
+    owned = {permission.code for permission in role.permissions}
+    if role.code == "super_admin":
+        return [permission.code for permission in catalog]
+    return [permission.code for permission in catalog if permission.code in owned]
 
 
 def _parse_date(value: str | None) -> datetime | None:
@@ -147,10 +186,62 @@ def _parse_date(value: str | None) -> datetime | None:
     return datetime.combine(day, time.min, tzinfo=settings.TZ).astimezone(timezone.utc)
 
 
-def _forbid_admin_on_super(auth: AuthContext, target: User) -> None:
-    """管理员不能操作超管账号。"""
-    if not _is_super(auth.user) and _is_super(target):
-        raise ApiError(403, 20006, "无权操作超管账号")
+def _fail(
+    db: Session,
+    request: Request,
+    auth: AuthContext,
+    *,
+    action: str,
+    target_type: str | None,
+    target_id: str | None,
+    status_code: int,
+    code: int,
+    message: str,
+) -> None:
+    """记录失败操作日志（独立事务）后抛出业务异常。
+
+    接口文档 §2.5 要求业务失败记录 result=failed 与原因；失败日志不能与
+    业务操作同事务回滚，因此先 rollback 再单独提交。
+    """
+    db.rollback()
+    write_audit(
+        db,
+        request,
+        user_id=auth.user.id,
+        username_snapshot=auth.user.username,
+        action=action,
+        result="failed",
+        detail={"reason": message},
+        target_type=target_type,
+        target_id=target_id,
+    )
+    db.commit()
+    raise ApiError(status_code, code, message)
+
+
+def _get_target_user(
+    db: Session,
+    user_id: int,
+    request: Request,
+    auth: AuthContext,
+    *,
+    action: str,
+) -> User:
+    """读取目标账号；不存在时写失败审计并返回 404/30017。"""
+    user = db.get(User, user_id)
+    if user is None:
+        _fail(
+            db,
+            request,
+            auth,
+            action=action,
+            target_type="account",
+            target_id=str(user_id),
+            status_code=404,
+            code=30017,
+            message="用户不存在",
+        )
+    return user
 
 
 @router.get("/users")
@@ -160,7 +251,7 @@ def list_users(
     status: str = "all",
     created_from: str | None = None,
     created_to: str | None = None,
-    page: int = Query(1, ge=1),
+    page: int = Query(1),
     page_size: int = Query(20),
     auth: AuthContext = Depends(require_permission("admin.accounts.view")),
     db: Session = Depends(get_db),
@@ -175,6 +266,8 @@ def list_users(
         raise ApiError(400, 10003, "状态参数不合法")
     if page_size not in (20, 50, 100):
         raise ApiError(400, 10003, "每页条数不合法")
+    # 接口文档 §1.5：page 小于 1 按 1 处理
+    page = max(1, page)
 
     from_utc = _parse_date(created_from)
     to_utc = _parse_date(created_to)
@@ -204,9 +297,10 @@ def list_users(
             .limit(page_size)
         )
     )
+    stats_map = _stats_for_users(db, [user.id for user in users])
     return ok(
         {
-            "items": [_user_payload(db, u) for u in users],
+            "items": [_user_payload(db, u, stats=stats_map[u.id]) for u in users],
             "total": total,
             "page": page,
             "page_size": page_size,
@@ -216,34 +310,58 @@ def list_users(
 
 @router.post("/users")
 def create_user(
-    payload: CreateUserRequest,
     request: Request,
+    payload: CreateUserRequest | None = None,
     auth: AuthContext = Depends(require_permission("admin.accounts.create")),
     db: Session = Depends(get_db),
 ) -> dict:
     """新建账号。"""
+    # 无请求体时也返回文档约定的 10002，而不是框架 422
+    payload = payload or CreateUserRequest()
+    action = "account.create"
     username = (payload.username or "").strip()
     display_name = (payload.display_name or "").strip()
     password = payload.password or ""
     status = payload.status or "active"
+    target_id = username or None
+
+    def fail(status_code: int, code: int, message: str) -> None:
+        _fail(
+            db,
+            request,
+            auth,
+            action=action,
+            target_type="account",
+            target_id=target_id,
+            status_code=status_code,
+            code=code,
+            message=message,
+        )
 
     if not username or not display_name or not password or payload.roles is None:
-        raise ApiError(400, 10002, "请填写完整账号信息")
+        fail(400, 10002, "请填写完整账号信息")
+    # 接口文档 §5.1：密码不可为纯空格
+    if not password.strip():
+        fail(400, 10002, "请填写完整账号信息")
     if not USERNAME_RE.fullmatch(username):
-        raise ApiError(400, 10003, "用户名需为 4~20 位字母、数字或下划线")
+        fail(400, 10003, "用户名需为 4~20 位字母、数字或下划线")
     if len(display_name) > 30:
-        raise ApiError(400, 10004, "显示名不能超过 30 个字符")
+        fail(400, 10004, "显示名不能超过 30 个字符")
     if not (8 <= len(password) <= 32):
-        raise ApiError(400, 10004, "密码长度需为 8~32 位")
+        fail(400, 10004, "密码长度需为 8~32 位")
     if status not in ("active", "disabled"):
-        raise ApiError(400, 10003, "状态参数不合法")
+        fail(400, 10003, "状态参数不合法")
 
-    combo = _validate_role_combo(payload.roles)
+    try:
+        combo = _validate_role_combo(payload.roles)
+    except ApiError as exc:
+        fail(exc.status_code, exc.code, exc.message)
+
     if "super_admin" in combo and not _is_super(auth.user):
-        raise ApiError(403, 20005, "无权分配超管角色")
+        fail(403, 20005, "无权分配超管角色")
 
     if db.scalar(select(User).where(User.username == username)) is not None:
-        raise ApiError(409, 30010, "用户名已存在")
+        fail(409, 30010, "用户名已存在")
 
     user = User(
         username=username,
@@ -254,12 +372,15 @@ def create_user(
     user.roles = _role_objects(db, list(combo))
     db.add(user)
     write_audit(
-        db, request,
+        db,
+        request,
         user_id=auth.user.id,
         username_snapshot=auth.user.username,
-        action="account.create",
+        action=action,
         result="success",
         detail={"target_username": username},
+        target_type="account",
+        target_id=username,
     )
     db.commit()
     db.refresh(user)
@@ -273,7 +394,9 @@ def get_user(
     db: Session = Depends(get_db),
 ) -> dict:
     """用户详情。"""
-    target = _get_target_user(db, user_id)
+    target = db.get(User, user_id)
+    if target is None:
+        raise ApiError(404, 30017, "用户不存在")
     if not _is_super(auth.user) and _is_super(target):
         raise ApiError(403, 20006, "无权操作超管账号")
     return ok(_user_payload(db, target))
@@ -282,109 +405,176 @@ def get_user(
 @router.patch("/users/{user_id}")
 def update_user(
     user_id: int,
-    payload: UpdateUserRequest,
     request: Request,
+    payload: UpdateUserRequest | None = None,
     auth: AuthContext = Depends(require_permission("admin.accounts.edit")),
     db: Session = Depends(get_db),
 ) -> dict:
     """编辑显示名、角色、状态。"""
-    target = _get_target_user(db, user_id)
+    # 无请求体时按「请至少修改一个字段」返回 10002
+    payload = payload or UpdateUserRequest()
+    action = "account.update"
+    target = _get_target_user(db, user_id, request, auth, action=action)
+
+    def fail(status_code: int, code: int, message: str) -> None:
+        _fail(
+            db,
+            request,
+            auth,
+            action=action,
+            target_type="account",
+            target_id=target.username,
+            status_code=status_code,
+            code=code,
+            message=message,
+        )
+
     actor_is_super = _is_super(auth.user)
     is_self = auth.user.id == target.id
 
-    changes = {}
-    if payload.display_name is not None:
-        changes["display_name"] = payload.display_name
-    if payload.roles is not None:
-        changes["roles"] = payload.roles
-    if payload.status is not None:
-        changes["status"] = payload.status
-    if not changes:
-        raise ApiError(400, 10002, "请至少修改一个字段")
+    # 请求中出现的字段（用于「至少修改一个字段」校验）
+    if payload.display_name is None and payload.roles is None and payload.status is None:
+        fail(400, 10002, "请至少修改一个字段")
 
+    # 已删除账号必须先走恢复接口，不能通过编辑绕过（接口文档 §13.1）
+    if target.status == "deleted":
+        fail(409, 30018, "当前账号状态不允许该操作")
+
+    # 按「值是否改变」判断边界：前端编辑弹窗总是提交 display_name/roles/status
+    roles_changed = payload.roles is not None and set(payload.roles) != _roles_of(target)
+    status_changed = payload.status is not None and payload.status != target.status
+
+    # 账号边界（接口文档 §7.2）
     if not actor_is_super and _is_super(target):
-        raise ApiError(403, 20006, "无权操作超管账号")
-    if is_self and not actor_is_super and ("roles" in changes or "status" in changes):
-        raise ApiError(403, 20007, "不能修改自己的角色或状态")
+        fail(403, 20006, "无权操作超管账号")
+    if is_self and not actor_is_super and (roles_changed or status_changed):
+        fail(403, 20007, "不能修改自己的角色或状态")
     if is_self and actor_is_super:
-        if "status" in changes:
-            raise ApiError(403, 20007, "不能修改自己的状态")
-        if "roles" in changes and "super_admin" not in changes["roles"]:
-            raise ApiError(403, 20007, "不能移除自己的超管角色")
-    if not actor_is_super and not is_self and "admin" in _roles_of(target) and "roles" in changes:
-        raise ApiError(403, 20005, "无权修改其他管理员的角色")
-    if not actor_is_super and "roles" in changes and "super_admin" in changes["roles"]:
-        raise ApiError(403, 20005, "无权分配超管角色")
+        if status_changed:
+            fail(403, 20007, "不能修改自己的状态")
+        if roles_changed and "super_admin" not in (payload.roles or []):
+            fail(403, 20007, "不能移除自己的超管角色")
+    if not actor_is_super and not is_self and "admin" in _roles_of(target) and roles_changed:
+        fail(403, 20005, "无权修改其他管理员的角色")
+    if not actor_is_super and roles_changed and "super_admin" in (payload.roles or []):
+        fail(403, 20005, "无权分配超管角色")
 
+    before = {
+        "display_name": target.display_name,
+        "roles": sorted(_roles_of(target)),
+        "status": target.status,
+    }
+
+    new_display_name = target.display_name
     new_status = target.status
     new_roles = _roles_of(target)
-    if "display_name" in changes:
-        dn = changes["display_name"].strip()
-        if not dn or len(dn) > 30:
-            raise ApiError(400, 10004, "显示名不能超过 30 个字符")
-        target.display_name = dn
-    if "roles" in changes:
-        combo = _validate_role_combo(changes["roles"])
-        new_roles = set(combo)
-    if "status" in changes:
-        if changes["status"] not in ("active", "disabled"):
-            raise ApiError(400, 10003, "状态参数不合法")
-        new_status = changes["status"]
 
-    # 最后可用超管保护
+    if payload.display_name is not None:
+        dn = payload.display_name.strip()
+        if not dn:
+            fail(400, 10002, "请填写完整账号信息")
+        if len(dn) > 30:
+            fail(400, 10004, "显示名不能超过 30 个字符")
+        new_display_name = dn
+    if payload.roles is not None:
+        try:
+            combo = _validate_role_combo(payload.roles)
+        except ApiError as exc:
+            fail(exc.status_code, exc.code, exc.message)
+        new_roles = set(combo)
+    if payload.status is not None:
+        if payload.status not in ("active", "disabled"):
+            fail(400, 10003, "状态参数不合法")
+        new_status = payload.status
+
+    # 最后可用超管保护（接口文档 §7.2 / §13）
     if _is_super(target) and target.status == "active":
-        losing_super = ("roles" in changes and "super_admin" not in new_roles) or (
-            "status" in changes and new_status != "active"
+        losing_super = (roles_changed and "super_admin" not in new_roles) or (
+            status_changed and new_status != "active"
         )
         if losing_super and _count_active_super(db) <= 1:
-            raise ApiError(409, 30011, "必须保留至少一个可用超管")
+            fail(409, 30011, "必须保留至少一个可用超管")
 
-    if "roles" in changes:
+    target.display_name = new_display_name
+    if roles_changed:
         target.roles = _role_objects(db, list(new_roles))
-    if "status" in changes:
+    if status_changed:
         target.status = new_status
+        # 禁用使已签发 token 失效；启用不再恢复旧 token
+        if new_status == "disabled":
+            target.token_version += 1
 
+    after = {
+        "display_name": target.display_name,
+        "roles": sorted(new_roles),
+        "status": target.status,
+    }
     write_audit(
-        db, request,
+        db,
+        request,
         user_id=auth.user.id,
         username_snapshot=auth.user.username,
-        action="account.update",
+        action=action,
         result="success",
-        detail={"target_username": target.username},
+        detail={"before": before, "after": after},
+        target_type="account",
+        target_id=target.username,
     )
     db.commit()
+    db.refresh(target)
     return ok(_user_payload(db, target))
 
 
 @router.post("/users/{user_id}/reset-password")
 def reset_password(
     user_id: int,
-    payload: ResetPasswordRequest,
     request: Request,
+    payload: ResetPasswordRequest | None = None,
     auth: AuthContext = Depends(require_permission("admin.accounts.reset_password")),
     db: Session = Depends(get_db),
 ) -> dict:
     """重置密码，token_version 递增使旧 token 失效。"""
-    target = _get_target_user(db, user_id)
+    # 无请求体时返回 10002「请输入新密码」
+    payload = payload or ResetPasswordRequest()
+    action = "account.reset_password"
+    target = _get_target_user(db, user_id, request, auth, action=action)
+
+    def fail(status_code: int, code: int, message: str) -> None:
+        _fail(
+            db,
+            request,
+            auth,
+            action=action,
+            target_type="account",
+            target_id=target.username,
+            status_code=status_code,
+            code=code,
+            message=message,
+        )
+
     new_password = (payload.new_password or "").strip()
     if not new_password:
-        raise ApiError(400, 10002, "请输入新密码")
+        fail(400, 10002, "请输入新密码")
     if not (8 <= len(new_password) <= 32):
-        raise ApiError(400, 10004, "密码长度需为 8~32 位")
+        fail(400, 10004, "密码长度需为 8~32 位")
 
-    _forbid_admin_on_super(auth, target)
-    if _is_super(auth.user) and auth.user.id == target.id:
-        raise ApiError(403, 20007, "请通过个人中心修改自己的密码")
+    if not _is_super(auth.user) and _is_super(target):
+        fail(403, 20006, "无权操作超管账号")
+    if auth.user.id == target.id:
+        fail(403, 20007, "请通过个人中心修改自己的密码")
 
     target.password_hash = hash_password(new_password)
     target.token_version += 1
     write_audit(
-        db, request,
+        db,
+        request,
         user_id=auth.user.id,
         username_snapshot=auth.user.username,
-        action="account.reset_password",
+        action=action,
         result="success",
-        detail={"target_username": target.username},
+        detail={"user_id": target.id, "username": target.username},
+        target_type="account",
+        target_id=target.username,
     )
     db.commit()
     return ok(None)
@@ -398,20 +588,46 @@ def disable_user(
     db: Session = Depends(get_db),
 ) -> dict:
     """禁用账号。"""
-    target = _get_target_user(db, user_id)
-    _forbid_admin_on_super(auth, target)
+    action = "account.disable"
+    target = _get_target_user(db, user_id, request, auth, action=action)
+
+    def fail(status_code: int, code: int, message: str) -> None:
+        _fail(
+            db,
+            request,
+            auth,
+            action=action,
+            target_type="account",
+            target_id=target.username,
+            status_code=status_code,
+            code=code,
+            message=message,
+        )
+
+    if not _is_super(auth.user) and _is_super(target):
+        fail(403, 20006, "无权操作超管账号")
     if auth.user.id == target.id:
-        raise ApiError(403, 20007, "不能对自己执行该操作")
+        fail(403, 20007, "不能对自己执行该操作")
     if target.status == "deleted":
-        raise ApiError(409, 30018, "当前账号状态不允许该操作")
+        fail(409, 30018, "当前账号状态不允许该操作")
     if target.status == "disabled":
         return ok(_user_payload(db, target))
     if _is_super(target) and _count_active_super(db) <= 1:
-        raise ApiError(409, 30011, "必须保留至少一个可用超管")
+        fail(409, 30011, "必须保留至少一个可用超管")
 
     target.status = "disabled"
     target.token_version += 1
-    write_audit(db, request, user_id=auth.user.id, username_snapshot=auth.user.username, action="account.disable", result="success", detail={"target_username": target.username})
+    write_audit(
+        db,
+        request,
+        user_id=auth.user.id,
+        username_snapshot=auth.user.username,
+        action=action,
+        result="success",
+        detail={"target_username": target.username},
+        target_type="account",
+        target_id=target.username,
+    )
     db.commit()
     return ok(_user_payload(db, target))
 
@@ -424,15 +640,41 @@ def enable_user(
     db: Session = Depends(get_db),
 ) -> dict:
     """启用账号。"""
-    target = _get_target_user(db, user_id)
-    _forbid_admin_on_super(auth, target)
+    action = "account.enable"
+    target = _get_target_user(db, user_id, request, auth, action=action)
+
+    def fail(status_code: int, code: int, message: str) -> None:
+        _fail(
+            db,
+            request,
+            auth,
+            action=action,
+            target_type="account",
+            target_id=target.username,
+            status_code=status_code,
+            code=code,
+            message=message,
+        )
+
+    if not _is_super(auth.user) and _is_super(target):
+        fail(403, 20006, "无权操作超管账号")
     if target.status == "deleted":
-        raise ApiError(409, 30018, "当前账号状态不允许该操作")
+        fail(409, 30018, "当前账号状态不允许该操作")
     if target.status == "active":
         return ok(_user_payload(db, target))
 
     target.status = "active"
-    write_audit(db, request, user_id=auth.user.id, username_snapshot=auth.user.username, action="account.enable", result="success", detail={"target_username": target.username})
+    write_audit(
+        db,
+        request,
+        user_id=auth.user.id,
+        username_snapshot=auth.user.username,
+        action=action,
+        result="success",
+        detail={"target_username": target.username},
+        target_type="account",
+        target_id=target.username,
+    )
     db.commit()
     return ok(_user_payload(db, target))
 
@@ -445,19 +687,45 @@ def delete_user(
     db: Session = Depends(get_db),
 ) -> dict:
     """软删除账号。"""
-    target = _get_target_user(db, user_id)
-    _forbid_admin_on_super(auth, target)
+    action = "account.delete"
+    target = _get_target_user(db, user_id, request, auth, action=action)
+
+    def fail(status_code: int, code: int, message: str) -> None:
+        _fail(
+            db,
+            request,
+            auth,
+            action=action,
+            target_type="account",
+            target_id=target.username,
+            status_code=status_code,
+            code=code,
+            message=message,
+        )
+
+    if not _is_super(auth.user) and _is_super(target):
+        fail(403, 20006, "无权操作超管账号")
     if auth.user.id == target.id:
-        raise ApiError(403, 20007, "不能对自己执行该操作")
+        fail(403, 20007, "不能对自己执行该操作")
     if target.status == "deleted":
-        raise ApiError(409, 30018, "当前账号状态不允许该操作")
+        fail(409, 30018, "当前账号状态不允许该操作")
     if _is_super(target) and target.status == "active" and _count_active_super(db) <= 1:
-        raise ApiError(409, 30011, "必须保留至少一个可用超管")
+        fail(409, 30011, "必须保留至少一个可用超管")
 
     target.status = "deleted"
     target.deleted_at = datetime.now(timezone.utc)
     target.token_version += 1
-    write_audit(db, request, user_id=auth.user.id, username_snapshot=auth.user.username, action="account.delete", result="success", detail={"target_username": target.username})
+    write_audit(
+        db,
+        request,
+        user_id=auth.user.id,
+        username_snapshot=auth.user.username,
+        action=action,
+        result="success",
+        detail={"target_username": target.username},
+        target_type="account",
+        target_id=target.username,
+    )
     db.commit()
     return ok(None)
 
@@ -470,15 +738,41 @@ def restore_user(
     db: Session = Depends(get_db),
 ) -> dict:
     """恢复软删除账号。"""
-    target = _get_target_user(db, user_id)
-    _forbid_admin_on_super(auth, target)
+    action = "account.restore"
+    target = _get_target_user(db, user_id, request, auth, action=action)
+
+    def fail(status_code: int, code: int, message: str) -> None:
+        _fail(
+            db,
+            request,
+            auth,
+            action=action,
+            target_type="account",
+            target_id=target.username,
+            status_code=status_code,
+            code=code,
+            message=message,
+        )
+
+    if not _is_super(auth.user) and _is_super(target):
+        fail(403, 20006, "无权操作超管账号")
     if target.status != "deleted":
-        raise ApiError(409, 30018, "当前账号状态不允许该操作")
+        fail(409, 30018, "当前账号状态不允许该操作")
 
     target.status = "active"
     target.deleted_at = None
     target.token_version += 1
-    write_audit(db, request, user_id=auth.user.id, username_snapshot=auth.user.username, action="account.restore", result="success", detail={"target_username": target.username})
+    write_audit(
+        db,
+        request,
+        user_id=auth.user.id,
+        username_snapshot=auth.user.username,
+        action=action,
+        result="success",
+        detail={"target_username": target.username},
+        target_type="account",
+        target_id=target.username,
+    )
     db.commit()
     return ok(_user_payload(db, target))
 
@@ -489,19 +783,18 @@ def list_roles(
     db: Session = Depends(get_db),
 ) -> dict:
     """三个角色与权限点目录。"""
-    roles = list(db.scalars(select(Role).order_by(Role.id)))
-    permissions = list(db.scalars(select(Permission).order_by(Permission.group_name, Permission.code)))
-    all_codes = [p.code for p in permissions]
+    roles = sorted(db.scalars(select(Role)), key=lambda r: ROLE_ORDER.get(r.code, 99))
+    catalog = _catalog_sorted(list(db.scalars(select(Permission))))
     return ok(
         {
             "roles": [
                 {
-                    "code": r.code,
-                    "name": r.name,
-                    "editable": r.code != "super_admin",
-                    "permissions": all_codes if r.code == "super_admin" else [p.code for p in r.permissions],
+                    "code": role.code,
+                    "name": role.name,
+                    "editable": role.code != "super_admin",
+                    "permissions": _permission_codes_of(role, catalog),
                 }
-                for r in roles
+                for role in roles
             ],
             "permissions": [
                 {
@@ -511,7 +804,7 @@ def list_roles(
                     "group_name": p.group_name,
                     "is_super_only": p.is_super_only,
                 }
-                for p in permissions
+                for p in catalog
             ],
         }
     )
@@ -520,24 +813,78 @@ def list_roles(
 @router.put("/roles/{code}/permissions")
 def update_role_permissions(
     code: str,
-    payload: RolePermissionsRequest,
     request: Request,
+    payload: RolePermissionsRequest | None = None,
     auth: AuthContext = Depends(require_permission("admin.roles.edit")),
     db: Session = Depends(get_db),
 ) -> dict:
     """保存角色权限点（仅超管）。"""
-    if code not in ("user", "admin"):
-        raise ApiError(403, 20005, "无权限")
+    action = "role.update"
 
-    known = {p.code for p in db.scalars(select(Permission))}
-    if any(c not in known for c in payload.permissions):
-        raise ApiError(400, 10003, "权限点参数不合法")
-    super_only = {p.code for p in db.scalars(select(Permission).where(Permission.is_super_only.is_(True)))}
-    if any(c in super_only for c in payload.permissions):
-        raise ApiError(409, 30015, "超管专属权限不能授予该角色")
+    def fail(status_code: int, code_value: int, message: str) -> None:
+        _fail(
+            db,
+            request,
+            auth,
+            action=action,
+            target_type="role",
+            target_id=code,
+            status_code=status_code,
+            code=code_value,
+            message=message,
+        )
+
+    if code == "super_admin":
+        fail(403, 20005, "超管角色权限不可编辑")
+    if code not in ("user", "admin"):
+        fail(400, 10003, "角色参数不合法")
+    if payload is None or payload.permissions is None:
+        fail(400, 10002, "请选择权限点")
+
+    # 重复权限码去重，保持请求顺序
+    requested = list(dict.fromkeys(payload.permissions))
+    catalog = _catalog_sorted(list(db.scalars(select(Permission))))
+    known = {p.code for p in catalog}
+    unknown = [c for c in requested if c not in known]
+    if unknown:
+        fail(400, 10003, "权限点不存在")
+
+    super_only = {p.code for p in catalog if p.is_super_only}
+    if any(c in super_only for c in requested):
+        fail(409, 30015, "超管专属权限点不能授予该角色")
+
+    # 最低权限校验（接口文档 §10.2 规则 4）
+    if code == "user" and "user.workspace" not in requested:
+        fail(409, 30015, "普通用户角色至少保留「创作台」")
+    if code == "admin" and "admin.dashboard.view" not in requested:
+        fail(409, 30015, "管理员角色至少保留「概览」")
 
     role = db.scalar(select(Role).where(Role.code == code))
-    role.permissions = list(db.scalars(select(Permission).where(Permission.code.in_(payload.permissions))))
-    write_audit(db, request, user_id=auth.user.id, username_snapshot=auth.user.username, action="role.permissions.update", result="success", detail={"role_code": code})
+    if role is None:
+        fail(400, 10003, "角色参数不合法")
+
+    before = _permission_codes_of(role, catalog)
+    requested_set = set(requested)
+    role.permissions = [p for p in catalog if p.code in requested_set]
+    after = _permission_codes_of(role, catalog)
+
+    write_audit(
+        db,
+        request,
+        user_id=auth.user.id,
+        username_snapshot=auth.user.username,
+        action=action,
+        result="success",
+        detail={"before": before, "after": after},
+        target_type="role",
+        target_id=code,
+    )
     db.commit()
-    return ok(None)
+    return ok(
+        {
+            "code": role.code,
+            "name": role.name,
+            "editable": True,
+            "permissions": after,
+        }
+    )

@@ -11,30 +11,31 @@ from app.models.user import Permission, Role, User
 DEMO_PASSWORD = "Demo1234"
 
 # 权限点：(code, 名称, 类型, 分组, 是否仅超管, 说明)
+# 名称、类型与分组对齐 6 号接口文档 §2.3；分组只有「用户端 / 管理后台」两类。
 PERMISSIONS: list[tuple[str, str, str, str | None, bool, str]] = [
     ("user.workspace", "创作台", "menu", "用户端", False, "进入创作工作台"),
-    ("user.generate", "生成图片", "action", "用户端", False, "上传商品图、生成示例图与全套图"),
+    ("user.generate", "发起生成", "action", "用户端", False, "上传商品图、发起示例图与全套图生成"),
     ("user.history", "历史作品", "menu", "用户端", False, "查看历史作品"),
     ("user.profile", "个人中心", "menu", "用户端", False, "进入个人中心"),
-    ("admin.dashboard.view", "管理概览", "menu", "概览", False, "查看管理后台概览"),
-    ("admin.tokens.view", "Token 统计", "menu", "概览", False, "查看 Token 统计"),
-    ("admin.accounts.view", "用户列表", "menu", "账号与权限", False, "查看用户列表"),
-    ("admin.accounts.create", "新建账号", "action", "账号与权限", False, "新建账号"),
-    ("admin.accounts.edit", "编辑账号", "action", "账号与权限", False, "编辑账号"),
-    ("admin.accounts.reset_password", "重置密码", "action", "账号与权限", False, "重置用户密码"),
-    ("admin.accounts.disable", "禁用/启用", "action", "账号与权限", False, "禁用/启用账号"),
-    ("admin.accounts.delete", "删除/恢复", "action", "账号与权限", False, "软删除/恢复账号"),
-    ("admin.roles.view", "角色查看", "menu", "账号与权限", True, "查看角色与权限点（仅超管）"),
-    ("admin.roles.edit", "角色编辑", "action", "账号与权限", True, "编辑角色权限点（仅超管）"),
-    ("admin.content.view", "内容追溯", "menu", "内容追溯", False, "查看聊天与生图记录"),
-    ("admin.assets.view", "素材模板查看", "menu", "素材与模板", False, "查看模板/素材/尺寸"),
-    ("admin.assets.edit", "素材模板编辑", "action", "素材与模板", False, "编辑模板/素材/尺寸"),
-    ("admin.prompts.view", "提示词查看", "menu", "Agent 配置", False, "查看系统提示词"),
-    ("admin.prompts.edit", "提示词编辑", "action", "Agent 配置", False, "编辑系统提示词"),
-    ("admin.model.view", "模型配置查看", "menu", "Agent 配置", True, "查看模型配置（仅超管）"),
-    ("admin.model.edit", "模型配置编辑", "action", "Agent 配置", True, "编辑模型配置（仅超管）"),
-    ("admin.audit.view", "操作日志", "menu", "操作日志", True, "查看操作日志（仅超管）"),
-    ("admin.export", "数据导出", "action", "操作日志", True, "导出数据（仅超管）"),
+    ("admin.dashboard.view", "概览", "menu", "管理后台", False, "查看管理后台概览"),
+    ("admin.accounts.view", "用户管理", "menu", "管理后台", False, "查看用户列表与详情"),
+    ("admin.accounts.create", "新建账号", "action", "管理后台", False, "新建账号"),
+    ("admin.accounts.edit", "编辑账号", "action", "管理后台", False, "编辑显示名、角色与状态"),
+    ("admin.accounts.reset_password", "重置密码", "action", "管理后台", False, "重置用户密码"),
+    ("admin.accounts.disable", "禁用/启用", "action", "管理后台", False, "禁用或启用账号"),
+    ("admin.accounts.delete", "删除/恢复", "action", "管理后台", False, "软删除或恢复账号"),
+    ("admin.roles.view", "角色管理", "menu", "管理后台", True, "查看角色与权限点（仅超管）"),
+    ("admin.roles.edit", "编辑权限点", "action", "管理后台", True, "编辑角色权限点（仅超管）"),
+    ("admin.content.view", "内容追溯", "menu", "管理后台", False, "查看聊天与生图记录"),
+    ("admin.assets.view", "素材与模板", "menu", "管理后台", False, "查看模板、素材与尺寸"),
+    ("admin.assets.edit", "编辑素材/模板/尺寸", "action", "管理后台", False, "编辑模板、素材与尺寸"),
+    ("admin.prompts.view", "系统提示词", "menu", "管理后台", False, "查看系统提示词"),
+    ("admin.prompts.edit", "编辑系统提示词", "action", "管理后台", False, "编辑系统提示词"),
+    ("admin.model.view", "模型配置", "menu", "管理后台", True, "查看模型配置（仅超管）"),
+    ("admin.model.edit", "编辑模型配置", "action", "管理后台", True, "编辑模型配置（仅超管）"),
+    ("admin.tokens.view", "Token 统计", "menu", "管理后台", False, "查看 Token 统计"),
+    ("admin.audit.view", "操作日志", "menu", "管理后台", True, "查看操作日志（仅超管）"),
+    ("admin.export", "数据导出", "action", "管理后台", True, "导出数据（仅超管）"),
 ]
 
 ROLE_PERMISSIONS: dict[str, list[str]] = {
@@ -54,31 +55,7 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "admin.prompts.view",
         "admin.prompts.edit",
     ],
-    "super_admin": [
-        "user.workspace",
-        "user.generate",
-        "user.history",
-        "user.profile",
-        "admin.dashboard.view",
-        "admin.tokens.view",
-        "admin.accounts.view",
-        "admin.accounts.create",
-        "admin.accounts.edit",
-        "admin.accounts.reset_password",
-        "admin.accounts.disable",
-        "admin.accounts.delete",
-        "admin.roles.view",
-        "admin.roles.edit",
-        "admin.content.view",
-        "admin.assets.view",
-        "admin.assets.edit",
-        "admin.prompts.view",
-        "admin.prompts.edit",
-        "admin.model.view",
-        "admin.model.edit",
-        "admin.audit.view",
-        "admin.export",
-    ],
+    # 超管不写 role_permissions 行：由鉴权层按角色即时授予全部 23 个权限码（6 号文档 §1.4）。
 }
 
 ROLES: list[tuple[str, str]] = [
@@ -89,6 +66,7 @@ ROLES: list[tuple[str, str]] = [
 
 # (用户名, 显示名, 角色码列表)
 DEMO_USERS: list[tuple[str, str, list[str]]] = [
+    ("demo_super", "演示超管", ["super_admin"]),
     ("demo_user", "演示用户", ["user"]),
     ("demo_admin", "演示管理员", ["admin"]),
     ("demo_dual", "双角色演示", ["user", "admin"]),
@@ -102,6 +80,10 @@ def _ensure_role(db: Session, code: str, name: str) -> Role:
         db.add(role)
         db.flush()
         print(f"[种子] 新建角色 {code}")
+    elif role.name != name:
+        # 固定角色的中文名属于系统目录，允许种子收敛；不触碰用户与权限配置
+        role.name = name
+        print(f"[种子] 更新角色名称 {code}: {name}")
     return role
 
 
@@ -127,6 +109,23 @@ def _ensure_permission(
         db.add(permission)
         db.flush()
         print(f"[种子] 新建权限点 {code}")
+    else:
+        # 权限点是系统目录：已有库重跑种子时收敛名称/类型/分组，
+        # 但不改密码、角色权限关联等用户配置；否则改名改分组永远不会生效。
+        changed = (
+            permission.name != name
+            or permission.type != type_
+            or permission.group_name != group_name
+            or permission.is_super_only != is_super_only
+            or permission.description != description
+        )
+        if changed:
+            permission.name = name
+            permission.type = type_
+            permission.group_name = group_name
+            permission.is_super_only = is_super_only
+            permission.description = description
+            print(f"[种子] 更新权限点 {code}")
     return permission
 
 
