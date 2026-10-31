@@ -13,5 +13,5 @@
 
 ## 未完成 / 待办
 
-- [ ] 分支 `chore/agent-skills-setup` 尚未合并到 `main`（待用户选择 fast-forward 还是 PR）。
+- [x] 分支 `chore/agent-skills-setup` 已按用户要求 fast-forward 合并到 `main` 并推送。
 - [ ] 仓库无 `.gitignore`，`.env`（含 token）处于未跟踪状态，建议加入忽略列表（待用户确认）。

@@ -19,6 +19,7 @@
 - 用户将 classic PAT 写入 `.env`（键名 `GITHUBTOKEN`）。用 `gh auth login --with-token` 登录成功，scopes 含 `repo`。
 - `gh auth setup-git` 后 `git push -u origin chore/agent-skills-setup` 成功，远程新增分支。
 - `gh label create` 创建 4 个标签成功，`gh label list` 校验五项齐全。
+- 用户选择 fast-forward：`git switch main && git merge --ff-only chore/agent-skills-setup && git push origin main`，`main` 从 `071fa9a` 前进到分支顶端。
 
 ### 未改动
 

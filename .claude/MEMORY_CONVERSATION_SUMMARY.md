@@ -7,4 +7,5 @@
 - 用户选择：GitHub Issues、沿用默认 triage 标签、创建 `AGENTS.md`。
 - 已写入 `AGENTS.md` 与 `docs/agents/{issue-tracker,triage-labels,domain}.md`。
 - 用户随后提供 classic PAT（存于 `.env`，键名 `GITHUBTOKEN`），登录后启用 `repo` 范围。已完成：推送分支 `chore/agent-skills-setup`、创建 4 个缺失标签。
-- 待办：分支合并到 `main`（ff 或 PR）；`.env` 尚未加入 `.gitignore`。
+- 已完成：按用户要求 fast-forward 合并到 `main` 并推送。
+- 待办：`.env` 尚未加入 `.gitignore`（用户未确认新建）。
