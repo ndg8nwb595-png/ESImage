@@ -16,6 +16,9 @@
 - `gh label create` ×4 → `HTTP 403: Resource not accessible by personal access token`，因 PAT 缺 Issues 写权限，标签未创建。
 - 提交 `6fc53a4`（分支 `chore/agent-skills-setup`，10 个文件）。
 - `git push -u origin chore/agent-skills-setup` → `403 Permission to ndg8nwb595-png/ESImage.git denied`，PAT 缺 Contents 写权限；远程 `main` 仍为 `071fa9a`。
+- 用户将 classic PAT 写入 `.env`（键名 `GITHUBTOKEN`）。用 `gh auth login --with-token` 登录成功，scopes 含 `repo`。
+- `gh auth setup-git` 后 `git push -u origin chore/agent-skills-setup` 成功，远程新增分支。
+- `gh label create` 创建 4 个标签成功，`gh label list` 校验五项齐全。
 
 ### 未改动
 
