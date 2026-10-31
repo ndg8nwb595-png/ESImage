@@ -4,6 +4,14 @@
 """
 
 from app.models.audit import AuditLog
+from app.models.config import (
+    MaterialAsset,
+    ModelConfig,
+    PromptVersion,
+    SizePreset,
+    SystemPrompt,
+    Template,
+)
 from app.models.user import Permission, Role, User, role_permissions, user_roles
 from app.models.workspace import (
     AgentRun,
@@ -21,8 +29,14 @@ __all__ = [
     "CreativeSession",
     "GeneratedImage",
     "GenerationBatch",
+    "MaterialAsset",
+    "ModelConfig",
     "Permission",
+    "PromptVersion",
     "Role",
+    "SizePreset",
+    "SystemPrompt",
+    "Template",
     "UploadedAsset",
     "User",
     "role_permissions",
