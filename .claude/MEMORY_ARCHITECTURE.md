@@ -413,3 +413,9 @@
 - **取消与并发**：沿用复审结论——重试并发覆盖 `pending + generating`；生图开始后在途图允许完成；取消只阻止新图。
 - **测试环境**：主分支 160 项测试全部通过；两个 ops 测试问题属于主分支既有环境问题，已做最小修复（ASCII 无效 header、移除不存在的 delay_ms monkeypatch）。
 - **环境**：复用 `esimage-postgres` 55433，独立库 `esimage_generation` / `esimage_generation_test`；真实模型 `doubao-seed-character-260628` / `doubao-seed-2-1-lite-260915` / `doubao-seedream-5-0-pro-260628`。
+
+### 会话 17 补充：管理端前缀归属
+
+- 管理端子路由统一由 `app/modules/admin/router.py` 加 `/admin` 前缀；`admin/assets/router.py` 只定义 `/templates|/materials|/sizes`，不要再自带 `/admin`，否则会变成 `/api/v1/admin/admin/...`。
+- 用户端只读配置仍为 `/api/v1/templates|/sizes|/templates/{id}/thumbnail`，由 generation `config_router` 提供；两条路径互不冲突。
+- 真实全套批次在被系统终止前已完成 6/6；重生成完成验证受外部内存终止影响，不是代码缺陷，已把本地残留状态收敛为合法终态。

@@ -1315,3 +1315,9 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 - `APP_ENV=test GENERATION_MODEL_PROVIDER=fake AGENT_RETRY_BACKOFF_SCALE=0 bash scripts/curl_smoke_generation.sh`：全部接口通过。
 - `alembic heads`：唯一 head `0004_image_client_request`。
 - 真实 Seedream 5.0 Pro 单图生成成功；真实示例批次已跑通四类核心 Agent。
+
+### 会话 17 收尾
+
+- `backend/app/modules/admin/assets/router.py`：移除 `prefix="/admin"`，避免与 `admin/router.py` 的 `/admin` 前缀叠加成 `/api/v1/admin/admin/...`。
+- `backend/README.md` / `backend/app/modules/contract/openapi.py`：合并最新 main 的管理端内容追溯/账号路由与 4 号用户只读配置映射。
+- 验证：`TEST_DB_NAME=esimage_generation_test python -m pytest` **191 passed**；替身 curl 全接口通过；真实全套批次 48 在系统终止前 completed 6/6，单张/ZIP 200。

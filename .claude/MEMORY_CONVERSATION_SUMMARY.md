@@ -368,3 +368,11 @@
 - 验证：`TEST_DB_NAME=esimage_generation_test python -m pytest` **160 passed**（含 3/5/6/7/8/9/10/11 号模块）；修复了两个主分支既有的 ops 测试环境问题（非 ASCII header、`delay_ms` monkeypatch）。
 - 替身 curl 全接口通过；真实 Seedream 全链路正在复验（留白兜底优化后）。
 - 说明：当前分支仍为 `feat/generation-backend-demo`，未合并 main。
+
+### 会话 17 收尾：最新 main 与真实验收
+
+- 再次 rebase 到最新 `origin/main`（74f37c4，含 6/7/8 管理后台账号与内容追溯）；解决 README / contract / Memory 文档冲突。
+- 发现并修正管理端素材路由重复 `/admin` 前缀：主分支 `admin/router.py` 已统一加 `/admin`，4 号分支不应再给 assets router 加前缀；修正后 `/api/v1/admin/templates` 与用户端 `/api/v1/templates` 同时可用。
+- 全量 pytest **191 passed**；替身 curl 全部接口通过；重生成验收脚本改为轮询新图状态（批次在重试期间可能仍为 completed），已验证。
+- 真实验收：全套批次 48 在被系统因内存不足终止前已达到 **completed 6/6**，单张下载与整组 ZIP 均 200；随后重生成请求创建了新图 199，但 8011 服务进程被系统终止，新图停在 generating。已把本地残留记录收敛为合法终态（partial 5/6），这不是代码缺陷。
+- 真实示例图（优化后）人工检查通过：中文标题/卖点、留白与商品主体正常。

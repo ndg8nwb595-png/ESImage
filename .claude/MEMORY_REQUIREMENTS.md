@@ -446,3 +446,14 @@
 | pytest | 完成 | **160 passed**（含主分支模块） |
 | 替身 curl | 完成 | 全部接口通过 |
 | 真实 Seedream 全链路 | 复验中 | 安全体验模式已关闭；真实单图/示例已成功 |
+
+### 会话 17 收尾
+
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| rebase 最新 main（74f37c4） | 完成 | 解决 README/contract/Memory 冲突 |
+| 管理端素材路由前缀 | 完成 | 移除 assets router 的重复 `/admin`；主分支 admin router 已统一加 |
+| pytest | 完成 | **191 passed** |
+| 替身 curl | 完成 | 全部接口通过 |
+| 真实全套 6/6 | 完成 | 批次 48 在被系统终止前 completed 6/6；单张/ZIP 200 |
+| 真实重生成完成 | 未完成（外部） | 服务进程被系统因内存不足终止，新图停在 generating；已收敛为 partial |

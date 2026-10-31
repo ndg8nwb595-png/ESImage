@@ -243,3 +243,6 @@
 - **长提示词升级用 marker 判定**：不能只按长度覆盖；quality/prompt_builder 各带一个 revision marker，缺失才升级并写新 PromptVersion。
 - **TestClient 拒绝非 ASCII header**：`X-Request-ID: bad id!中文` 会在 httpx 层报 UnicodeEncodeError；测试无效 header 用纯 ASCII（如 `bad id!`）即可验证中间件重新生成。
 - **主分支测试也有环境坑**：`test_selftest_pure` 对不存在的 `delay_ms` 做 monkeypatch；应删除该行而不是给模块加假属性。
+- **管理端前缀只在一处加**：主分支 `admin/router.py` 已给子路由统一加 `/admin`；子路由自己再加会出现 `/admin/admin/...`，表现为 404。
+- **重试期间批次状态可能仍是 completed**：验收脚本不能只轮询批次状态，必须按 `image_id` 轮询新图直到 success/failed，否则会过早下载拿到 409。
+- **长时间真实 curl 验收注意内存**：本次系统在验收后被内存压力终止了后台命令；代码与批次数据不受影响，但本地 `generating` 残留需手动收敛。
