@@ -478,3 +478,13 @@
 | 替身 curl（local/MinIO） | 完成 | 均全接口通过 |
 | 真实 MinIO 重生成 | 完成 | fake 全套 6/6 + 真实重生成 success；下载/ZIP 200 |
 | 合并 main | 待做 | 真实验收通过后合并 |
+
+### 会话 18 收尾
+
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| MinIO 适配 | 完成 | 统一存储门面 + media_response |
+| pytest | 完成 | 191 passed（2 skipped） |
+| 替身 curl（local/MinIO） | 完成 | 全接口通过 |
+| MinIO 真实重生成 | 完成 | fake 全套 6/6 + 真实新图 success；下载/ZIP 200 |
+| 合并 main | 完成 | `487dd47` |

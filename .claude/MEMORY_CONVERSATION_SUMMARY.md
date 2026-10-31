@@ -392,3 +392,9 @@
 - 本地 `.env` 增加 `STORAGE_BACKEND=minio`、`MINIO_*`（9002）与 `MODEL_CONFIG_ENCRYPTION_KEY`；测试 conftest 强制 local。
 - 验证：全量 pytest **191 passed（2 skipped）**；替身 curl 在 local 与 MinIO 后端均全接口通过；MinIO 真实验收：fake 全套 6/6 + 真实重生成新图 success，批次回到 completed 6/6，单张下载与 ZIP 均 200。
 - 分支已适配 MinIO，准备提交并合并 main。
+
+### 会话 18 收尾：合并 main
+
+- `feat/generation-backend-demo` 已 rebase 到 MinIO main 并合并到 `main`：`487dd47`。
+- 最终验证：全量 pytest **191 passed（2 skipped）**；替身 curl 在 local 与 MinIO 后端均全接口通过；MinIO 真实验收（fake 全套 6/6 + 真实重生成一张）新图 success、批次 completed 6/6、单张下载与 ZIP 均 200。
+- 真实全套 6/6 的完整真实模型版本在容器重建前已完成过（旧本地存储）；MinIO 下的完整 6 张真实图未重跑，真实 Seedream 出图与存储读写已由重生成验收覆盖。
