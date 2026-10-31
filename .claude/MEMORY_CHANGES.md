@@ -403,7 +403,9 @@
 
 - `find docs/prd/5-历史作品 -type f` 确认 8 个文件（PRD + README + 接口文档 + 5 tickets）齐全。
 - `grep -rn "5-历史作品prd\.md" docs` 确认外部引用均带文件夹路径，无旧顶层路径残留。
-- 未运行代码或测试，未 commit，未创建 GitHub issue（tickets 为本地文件）。
+- 未运行代码或测试，未创建 GitHub issue（tickets 为本地文件）。
+- 2026-10-31 已提交并推送：commit `33890f1`（历史作品文档与五个记忆文档），`git push origin main` 成功，远端 main 为 `67f668d`，推送后 `HEAD...origin/main` 为 `0 0`。
+- 推送时 GitHub 443 直连超时，使用 `git -c http.curloptResolve=github.com:443:140.82.112.3` 临时固定可用 IP 完成 fetch/push，未修改全局配置。
 
 ## 2026-10-31 会话 10：管理后台-账号与权限最小 demo 文档拆解（to-tickets）
 
