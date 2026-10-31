@@ -11,6 +11,7 @@ venv/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+*.egg-info/
 
 # Node
 node_modules/
@@ -27,6 +28,8 @@ backend/.curl_tmp/
 logs/
 # 本地 curl 冒烟临时文件
 .smoke/
+backend/.ops_tmp/
+backend/.ops_logs/
 .DS_Store
 Thumbs.db
 

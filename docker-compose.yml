@@ -1,3 +1,7 @@
+# 11 号部署与运维：单机 Docker Compose 全栈。
+# 生产：只有 nginx 暴露 80；postgres 的 55433 为本地开发便利保留，生产应移除。
+# 卷持久化，`docker compose down` 不删除卷；禁止生产使用 `down -v`。
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -9,14 +13,206 @@ services:
       POSTGRES_DB: esimage
       TZ: Asia/Shanghai
     ports:
-      - "55433:5432"
+      - "55433:5432" # 本地开发便利（backend/.env 默认连接 55433）；生产移除
     volumes:
-      - esimage_pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U esimage -d esimage"]
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
+    networks: [esimage_net]
+
+  redis:
+    image: redis:7-alpine
+    pull_policy: never
+    container_name: esimage-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    networks: [esimage_net]
+
+  minio:
+    image: minio/minio:latest
+    pull_policy: never
+    container_name: esimage-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-esimage}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-esimage}
+      TZ: Asia/Shanghai
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks: [esimage_net]
+
+  minio-init:
+    image: minio/mc:latest
+    pull_policy: never
+    container_name: esimage-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-esimage}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-esimage}
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 $${MINIO_ACCESS_KEY} $${MINIO_SECRET_KEY}; do sleep 2; done;
+      mc mb --ignore-existing local/esimage;
+      mc anonymous set none local/esimage;
+      for p in uploads generated thumbnails archive exports templates materials avatars; do
+        echo probe > /tmp/$${p}.probe;
+        mc cp /tmp/$${p}.probe local/esimage/$${p}/.probe;
+        mc rm local/esimage/$${p}/.probe;
+      done;
+      echo 'minio-init: bucket esimage ready';
+      "
+    restart: "no"
+    networks: [esimage_net]
+
+  migrate:
+    build:
+      context: ./backend
+    image: esimage-backend
+    container_name: esimage-migrate
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://esimage:esimage@postgres:5432/esimage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["python", "scripts/migrate.py"]
+    restart: "no"
+    networks: [esimage_net]
+
+  backend:
+    build:
+      context: ./backend
+    image: esimage-backend
+    container_name: esimage-backend
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://esimage:esimage@postgres:5432/esimage
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      ESIMAGE_PROCESS: backend
+    volumes:
+      - applogs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health',timeout=3).status==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+    networks: [esimage_net]
+
+  worker:
+    build:
+      context: ./backend
+    image: esimage-backend
+    container_name: esimage-worker
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://esimage:esimage@postgres:5432/esimage
+      REDIS_URL: redis://redis:6379/0
+      ESIMAGE_PROCESS: worker
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
+    volumes:
+      - applogs:/app/logs
+    depends_on:
+      backend:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    command: ["celery", "-A", "app.celery_app:celery_app", "worker", "--loglevel=info", "--concurrency=${WORKER_CONCURRENCY:-4}"]
+    restart: unless-stopped
+    networks: [esimage_net]
+
+  beat:
+    build:
+      context: ./backend
+    image: esimage-backend
+    container_name: esimage-beat
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://esimage:esimage@postgres:5432/esimage
+      REDIS_URL: redis://redis:6379/0
+      ESIMAGE_PROCESS: beat
+    volumes:
+      - applogs:/app/logs
+    depends_on:
+      backend:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    command: ["celery", "-A", "app.celery_app:celery_app", "beat", "--loglevel=info"]
+    restart: unless-stopped
+    networks: [esimage_net]
+
+  frontend:
+    image: nginx:stable-alpine
+    container_name: esimage-frontend
+    volumes:
+      - ./infra/frontend:/usr/share/nginx/html:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks: [esimage_net]
+
+  nginx:
+    image: nginx:stable-alpine
+    container_name: esimage-nginx
+    ports:
+      - "80:80"
+      # - "443:443" # HTTPS 预留模板，部署时决定
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - nginxlogs:/var/log/nginx
+    depends_on:
+      frontend:
+        condition: service_started
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks: [esimage_net]
 
 volumes:
-  esimage_pgdata:
+  pgdata:
+  redisdata:
+  miniodata:
+  applogs:
+  nginxlogs:
+  backup:
+
+networks:
+  esimage_net:
+    driver: bridge

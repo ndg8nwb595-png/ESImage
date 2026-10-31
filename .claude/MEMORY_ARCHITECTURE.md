@@ -235,6 +235,8 @@
 
 ## Agent 会话交互后端实现约定（2026-10-31 用户确认）
 
+## 3 号 Agent 会话交互后端实现约定（2026-10-31）
+
 - **模块位置**：3 号后端统一放在 `backend/app/modules/chat/`，不改动 `modules/auth/` 内部实现。
 - **前置依赖**：3 号 demo 只做 2 号 demo 04 的增量；会话列表、首条消息建会话、SSE 骨架、自动命名、幂等由 2 号 `feat/workspace-backend-demo` 提供。
 - **当前阻塞**：`main` 尚无 2 号 demo 04 的可运行代码（2 号 agent 的 `workspace/sessions.py` 等仍为同设备另一工作区的未提交改动）。用户选择「等 2 号合并后再做」，不复制、不触碰对方未提交代码。
@@ -265,6 +267,29 @@
 - **演示专用接口/任务**：`GET /api/v1/sessions/_probe/stream`（验证 Nginx 不缓冲）与 `ops.selftest`（验证 Worker 与 `request_id` 透传），仅 `APP_ENV != production` 启用，生产 404/不注册；是否长期保留待确认。
 - **契约口径**：只有 nginx 暴露 80；`client_max_body_size 12m`；API 读超时 300s；SSE 关闭缓冲/缓存并清空 `Connection`；安全头使用 `always`；`X-Request-ID` 复用或生成 UUIDv4；日志 JSON 按天轮转 90 份压缩；备份保留 7 天。
 - **待统一项**：README §6 与接口文档 §10 的 14 项，重点是双健康接口差异、健康接口鉴权、`X-Request-ID` 头名、失败值/超时、安全头取值、初始密码规则、演示专用接口、413 响应体、恢复覆盖语义、Nginx 日志轮转、MinIO 前缀、空调度、stdout 保留。
+
+## 历史作品后端最小 demo 实现约定（2026-10-31）
+
+- **目录与职责**：`backend/app/modules/history/` 放 `router.py`（列表/详情/ZIP）、`service.py`（可见性/分页/序列化）、`zip_export.py`（ZIP+manifest）、`seed.py`（夹具）；路由在 `main.py` 统一挂载，不修改 auth/workspace 路由结构。
+- **复用而非重写**：单张预览与下载继续用 2 号 workspace 的 `/images/{id}/content`、`/download`；历史模块只补权限放宽、`full + final` 校验、归档读取与更严格文件名规则。ZIP 实现集中在 history `zip_export.build_batch_zip`，4 号 demo 08 接入时调用同一函数。
+- **权限**：列表/详情/单张下载/整组 ZIP 用 `user.history`；预览与缩略图接受 `user.history` 或 `user.generate`。`app/core/deps.py` 提供 `require_permission` / `require_any_permission`，`workspace.service` 重新导出以兼容 2 号已有调用。
+- **越权口径**：历史聚合接口按 5 号返回 403/20005；媒体接口仍按 2 号“不泄露存在性”返回 404/30014。该差异保留为待统一项。
+- **归档**：`archived_at` 非空时原件路径为 `archive/{file_path}`，缩略图始终读热存 `thumbnail_path`；`ARCHIVE_READ_TIMEOUT_SECONDS` 默认 60；归档缺失/超时/存储异常统一 404/30014「文件归档中，请稍后重试」并写 `esimage.storage` 错误日志（image_id/batch_id/archive_path/reason）。
+- **ZIP 契约**：仅 `full` 且 `completed`/`partially_failed`；按 `index_no` 1..total_count 取 `attempt_no` 最大、非 `superseded` 的记录；manifest UTF-8 BOM、中文表头、`success`/`failed`、失败原因；任一成功图不可读则整体失败，不返回残缺包；构建到 `SpooledTemporaryFile` 后分块流式输出。
+- **文件名**：`{商品名称}_{主图|详情图}_{序号}_{yyyyMMddHHmmss}.png`；商品名称非法字符、控制字符、结尾点/空格替换为下划线；时间戳取图片 `created_at`，ZIP 名取批次 `created_at`，均按 Asia/Shanghai。
+- **种子口径**：demo_user 21 个历史可见批次（18 completed + 1 含 superseded + 1 归档 + 1 partial），另 1 个示例批次与 1 个失败批次不进历史；demo_dual 另有 1 个全套批次用于跨用户 403，不进入 demo_user 列表；重复执行按 `client_request_id=seed-history-*` 跳过。
+- **查询与分页**：历史列表先用「可见图片按 batch 聚合」的子查询，子查询内同时按 `GeneratedImage.user_id` 与批次 user/type/status 过滤；先算 total，`offset >= total` 直接返回空 items，避免超大页码溢出 bigint。
+- **命名与可见性单一来源**：`history.service` 提供 `HISTORY_BATCH_STATUSES`、`visible_image_filters`、`is_visible_image`；`zip_export` 复用，不再各自维护。单张下载与 ZIP 图片名共用 `workspace.service.image_download_filename`。
+- **归档超时**：线程池读取必须 `shutdown(wait=False, cancel_futures=True)`，不能用 `with ThreadPoolExecutor`（退出会等待线程导致超时失效）；已补 0.1 秒慢读用例。
+- **种子自愈**：种子启动时校验批次图片记录与 file/thumbnail 文件（归档件校验 `archive/` 路径），缺失则删除 `seed-history-*` 批次并重建，避免数据库保留而存储丢失时整页 404。
+- **日志命名**：归档/热存储读取错误使用 `esimage.storage` logger，包含 image_id/batch_id/path/reason，不含 token。
+- **待用户/跨模块确认**：
+  1. 种子计数与文档“21 个 completed + 1 partial”不一致，当前以接口验收 `total=21` 为准。
+  2. manifest 的「宽度/高度」分列与 4 号「尺寸」单列冲突，需与 4 号 demo 08 统一。
+  3. 示例图下载 409 文案沿用 2 号「示例图确认前不可下载」，5 号 §8.4 写「当前图片不可下载」；为保护 2 号已有调用暂未改。
+  4. 归档读取与文件名工具暂放 `workspace/service.py`（history 反向 import）；权限依赖已上移 `app/core/deps.py`。若后续 chat/generation 也复用归档工具，需确认是否再上移。
+  5. `GET /batches/{batch_id}/download` 在 4 号生成模块中也会出现；合并分支时需改为只保留一份实现，避免 FastAPI 重复路由。
+## 3 号 Agent 会话交互后端最终实现（2026-10-31）
 
 - **模块位置**：3 号后端统一放在 `backend/app/modules/chat/`，不改动 `modules/auth/` 内部实现；会话/消息/AgentRun 表复用 2 号 `app/models/workspace.py`，不重复建表。
 - **复用 2 号基线**：会话列表、首条消息建会话、SSE 骨架、自动命名、幂等由 2 号 demo 04 提供；3 号增加重命名、软删除、惰性超时、`meta.duplicate`、`done.requirement_changed`、10 轮上下文、上传图校验与 `agent_runs` 明细。

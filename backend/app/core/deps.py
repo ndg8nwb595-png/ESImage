@@ -9,6 +9,7 @@ import jwt
 from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
+from app.core.context import user_id_var
 from app.core.database import get_db
 from app.core.response import ApiError
 from app.core.security import decode_access_token
@@ -80,6 +81,9 @@ def get_current_auth(request: Request, db: Session = Depends(get_db)) -> AuthCon
     # 5. 账号状态
     if user.status != "active":
         raise ApiError(403, 20004, "账号不可用")
+
+    # 供 JSON 结构化日志关联用户
+    user_id_var.set(user.id)
 
     return AuthContext(
         user=user,

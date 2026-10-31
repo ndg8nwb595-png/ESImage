@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "esimage-backend"
+version = "0.1.0"
+description = "ESImage 后端（FastAPI + SQLAlchemy + PostgreSQL）"
+requires-python = ">=3.11"
+
+[project.scripts]
+esimage-data = "app.modules.data.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

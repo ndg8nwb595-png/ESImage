@@ -295,6 +295,17 @@
 - 用户确认的取舍：8 个切片；只起 Worker/Beat、不做归档；健康接口双路径；PRD 移动并更新引用。
 - 演示专用：`GET /api/v1/sessions/_probe/stream` 与 `ops.selftest`，仅非生产启用，待正式确认是否保留。
 
-- 已确认范围：只做后端；重命名、软删除、消息状态、轻链路、上下文、需求摘要、需求变化提示、`agent_runs` 明细。
-- 明确不做：`POST /sessions`、会话恢复、取消接口、`agent_runs` 查询、消息搜索/导出、管理端聊天、聊天触发生图、真实内容审核；生图 `doubao-seedream-5-0-pro-260628` 属于 4 号，3 号不调用。
-- 环境：复用 docker `esimage-postgres`（55433）；8001 跑 3 号服务；chrome-devtools MCP 已验证 Swagger UI 与 OpenAPI。
+## 2026-10-31 会话 17：5 号历史作品后端最小 demo 实现
+
+| 需求 | 状态 | 实现手段 |
+| --- | --- | --- |
+| 分支与骨架 | 完成 | `feat/history-backend-demo`；`4ea5d64` 建 `history/README.md` 骨架，push 后 ff 合并 `main` |
+| 历史列表与分页 | 完成 | `GET /history`：本人 `full`、`completed`/`partially_failed`、final+success+visible；固定 20 条，`page` 非法返回 10001 |
+| 批次详情与网格 | 完成 | `GET /history/{batch_id}`：不存在 404/30004、越权 403/20005、非历史范围 404/30004；图片按序号升序 |
+| 大图预览与单张下载 | 完成 | 复用 `/images/{id}/content`、`/download`；预览/缩略图权限放宽为 `user.history` 或 `user.generate`；下载限 `full + final + success + visible` |
+| 整组 ZIP 与 manifest | 完成 | `GET /batches/{batch_id}/download`，同步流式 ZIP；manifest UTF-8 BOM、中文表头、成功/失败行、失败原因 |
+| 归档读取与降级 | 完成 | `archived_at` 非空读 `archive/{file_path}`；缩略图始终热存；`ARCHIVE_READ_TIMEOUT_SECONDS` 默认 60；缺失/超时 404/30014 并写错误日志 |
+| 种子夹具 | 完成 | `history/seed.py` 幂等写入 21 个历史可见批次 + 示例/失败批次 + demo_dual 其他用户批次；接入 `scripts/seed.py` |
+| 自动化测试 | 完成 | `tests/test_history.py` 8 用例；合并最新 `main` 后全量 `pytest` 93 用例通过 |
+| curl 验收 | 完成 | `scripts/curl_history_smoke.sh`，独立库/存储，覆盖接口文档 §16 全部调用 |
+| 待用户裁决 | 待确认 | 种子计数口径（21 可见 vs 文档“21 completed + partial”）；manifest 宽度/高度分列与 4 号“尺寸”单列差异 |
