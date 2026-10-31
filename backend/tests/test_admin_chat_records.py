@@ -9,12 +9,79 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 LOGIN_URL = "/api/v1/auth/login"
 SESSIONS_URL = "/api/v1/admin/chat/sessions"
 SEARCH_URL = "/api/v1/admin/chat/messages/search"
 MODEL_CONFIG_URL = "/api/v1/admin/model-config"
 PROMPTS_URL = "/api/v1/admin/prompts"
 DEMO_PASSWORD = "Demo1234"
+
+SEEDED_TITLES = {
+    "demo_user": ("秋季通勤衬衫", "夏季防晒外套", "通勤鞋搭配建议"),
+    "demo_super": ("超管测试会话",),
+}
+
+
+@pytest.fixture(scope="module", autouse=True)
+def module8_seed():
+    """仅在本模块准备 8 号夹具，结束后清理，避免污染其他模块的测试库。"""
+    from app.core.database import SessionLocal
+    from app.modules.admin.chat_records.seed import seed_chat_records
+    from app.modules.admin.seed import seed_config
+
+    print("[测试] 准备 8 号提示词/模型配置/聊天夹具……")
+    with SessionLocal() as db:
+        seed_config(db)
+        seed_chat_records(db)
+    yield
+    _cleanup_module8_seed()
+
+
+def _cleanup_module8_seed() -> None:
+    """删除本模块写入的会话及其子数据，恢复干净测试库。"""
+    from sqlalchemy import delete, select
+
+    from app.core.database import SessionLocal
+    from app.models.user import User
+    from app.models.workspace import (
+        AgentRun,
+        ChatMessage,
+        CreativeSession,
+        GenerationBatch,
+    )
+
+    print("[测试] 清理 8 号聊天夹具……")
+    with SessionLocal() as db:
+        session_ids: list[int] = []
+        for username, titles in SEEDED_TITLES.items():
+            user = db.scalar(select(User).where(User.username == username))
+            if user is None:
+                continue
+            session_ids.extend(
+                db.scalars(
+                    select(CreativeSession.id).where(
+                        CreativeSession.user_id == user.id,
+                        CreativeSession.title.in_(titles),
+                    )
+                )
+            )
+        if session_ids:
+            db.execute(delete(AgentRun).where(AgentRun.session_id.in_(session_ids)))
+            db.execute(
+                delete(GenerationBatch).where(
+                    GenerationBatch.session_id.in_(session_ids)
+                )
+            )
+            db.execute(
+                delete(ChatMessage).where(ChatMessage.session_id.in_(session_ids))
+            )
+            db.execute(
+                delete(CreativeSession).where(CreativeSession.id.in_(session_ids))
+            )
+            db.commit()
+        print(f"[测试] 已清理 {len(session_ids)} 个 8 号会话")
 
 
 def _login(client, username: str) -> str:

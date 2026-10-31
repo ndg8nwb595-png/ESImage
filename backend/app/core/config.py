@@ -46,6 +46,10 @@ class Settings:
         self.ARCHIVE_READ_TIMEOUT_SECONDS = float(
             os.getenv("ARCHIVE_READ_TIMEOUT_SECONDS", "60")
         )
+        # 7 号管理后台概览四卡缓存 TTL（秒）
+        self.DASHBOARD_CACHE_TTL_SECONDS = int(
+            os.getenv("DASHBOARD_CACHE_TTL_SECONDS", "60")
+        )
 
         # 3 号 Agent 会话交互：消息超时阈值、上下文轮数与 SSE 心跳间隔
         self.CHAT_MESSAGE_TIMEOUT_SECONDS = int(

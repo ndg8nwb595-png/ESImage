@@ -277,3 +277,16 @@
 - 环境遗留：共享 `esimage` 库已存在同名「秋季通勤衬衫」旧测试会话，种子按 `(user_id,title)` 幂等跳过；标准 12 消息夹具在测试库中完整验证。尝试重命名旧会话被权限策略拒绝，未强改共享数据。
 - 补充确认：8 号 `MODEL_CONFIG_ENCRYPTION_KEY` 与 11 号 `ENCRYPTION_KEY` 采用双名兼容（优先新名，回退旧名，均缺失才启动失败）。
 - 独立审查结论「无阻断问题」；修复 4 条非阻断项：`around_id` 按实际更早条数补齐、`status=""` 等价 all、版本 1 仅在 current<=1 时补写并记 demo_super、捕获 AES-GCM `InvalidTag`。修复后测试与 curl 均通过。
+- 合并最新 `main` 时发现并行 agent 已在 `content/chat_router.py` 放旧聊天实现并与 `chat_records` 同时挂载；用户确认「只挂载新实现」：旧文件保留但不注册，README 标注 legacy。`admin/router.py` 采用 main 的混合前缀方案（dashboard/tokens/content 自带 `/admin`，其余挂载时加）。
+## 2026-10-31 会话 17：管理后台-账号与权限后端实现与 curl 验收
+
+- 用户要求：连接 chrome-devtools MCP；在合适位置建模块文件夹；新建分支；先推送分支并快进合并 `main`；只做后端；每个接口用 curl 验证；复用同设备其他 agent 的 docker 进程。
+- 摸查发现：`origin/main` 已被并行 agent 推入 6 号实现（`200b43c`），但存在阻塞问题：`admin/router.py` 把子模块当 router 注册、管理端路由缺 `/admin` 前缀、seed 没有 `demo_super`、超管不按角色全量授权、审计契约与 6 号接口文档不一致、角色权限缺最低权限校验、账号边界与错误码有缺口。
+- 用户确认的架构选择：复用 `modules/admin/accounts`（账号 + 角色）与 `modules/admin/audit`（日志）骨架；扩充 `modules/auth/seed.py` 到 23 权限并新增 `demo_super`；操作日志接口双兼容（文档字段 + 前端旧字段）；统计用真实值 `stats_available=true`；权限点名称与分组按 6 号文档。
+- 实现：修复路由导入与前缀；seed 23 权限 + 4 个演示账号；`core/deps.py` 超管全量授权、状态先于 `token_version`；accounts 13 个接口补齐边界、错误码、审计 object 与失败日志；audit 双参数/双字段；新增 `tests/test_admin_accounts.py`（10 个用例）与 `scripts/curl_admin_smoke.sh`。
+- 验证：全量 `pytest` **95 passed**；curl 13 个接口全部通过；OpenAPI 共 36 条管理端路由；本地库 `esimage_admin`、端口 8016。
+- 分支：`feat/admin-accounts-backend-demo`；骨架先推送并 `--ff-only` 合并 `main`，业务实现验证后再合并。
+- 独立代码审查后修复 7 项：已删除账号禁止 PATCH 绕过恢复、编辑边界按值判断（兼容前端总提交三字段）、纯空格密码拒绝、种子收敛权限目录、404 失败审计、统计批量聚合、冒烟脚本自初始化；最终全量 **98 passed**，curl 40 项 HTTP + 17 项业务码检查 0 失败。
+- 合并最新 `main`（9 号契约 `d4343c7`/`9ea5316`、7 号管理端整合 `a97801c`、OpenAPI 路径对齐 `f42bf1e`）：解决 `deps.py`、`admin/router.py`、`auth/seed.py`、`test_contract.py` 冲突；管理端统一 `/api/v1/admin/*`，统计采用 `build_user_stats`，补齐 `demo_user2` 并去重 `demo_super`。
+- 合并后全量 **171 collected / 169 passed**；仅剩 2 个 11 号 `test_ops` 既有失败（httpx2 中文头编码、monkeypatch 不存在的 `delay_ms`），已在干净 `origin/main` 工作树复现，按范围未修改；curl 复验 0 失败，OpenAPI 36 条管理端路由无双重前缀。
+- chrome-devtools MCP 已验证 `/api/docs` Swagger UI（admin-accounts 11 个接口、admin-audit 2 个接口，控制台无错误）；冒烟脚本就绪探测修正为 `/api/openapi.json`。

@@ -4,6 +4,7 @@ FastAPI + SQLAlchemy + PostgreSQL 16。当前已实现：
 
 - `auth`：登录、当前用户、退出登录（1 号 PRD 最小 demo）。
 - `workspace`：创作工作台后端（2 号 PRD 最小 demo），含会话、聊天 SSE、商品图上传、示例图/全套生成、结果预览与单张下载。
+- `admin`：管理后台（6/7/8 号 PRD 最小 demo），含账号与权限、角色权限点、操作日志、概览与 Token 统计、内容追溯、素材模板、系统提示词与模型配置。
 
 ## 1. 本地启动
 
@@ -37,19 +38,28 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8010
 
 | 用户名 | 密码 | 角色 | 说明 |
 | --- | --- | --- | --- |
+| `demo_super` | `Demo1234` | `super_admin` | 角色管理、操作日志与全部权限 |
 | `demo_user` | `Demo1234` | `user` | 工作台、生成、下载权限 |
 | `demo_admin` | `Demo1234` | `admin` | 无工作台权限，用于验证 403 |
 | `demo_dual` | `Demo1234` | `user` + `admin` | 双角色演示 |
 
 ## 3. curl 验收
 
-脚本会临时启动 8010 端口服务，逐条调用全部工作台接口，结束后自动关闭：
+工作台验收脚本会临时启动 8010 端口服务，逐条调用全部工作台接口，结束后自动关闭：
 
 ```bash
 bash scripts/curl_smoke.sh
 ```
 
-脚本默认连接 `127.0.0.1:55433/esimage`（与 `docker compose` 和 `.env.example` 一致）。并行开发时建议为本模块使用独立库，例如：
+管理后台「账号与权限」验收脚本会临时启动 8016 端口服务（13 个接口 + 权限边界 + 日志双兼容）：
+
+```bash
+PYTHON=.venv/Scripts/python.exe bash scripts/curl_admin_smoke.sh
+```
+
+该脚本默认连接 `127.0.0.1:55433/esimage_admin`，可用 `DATABASE_URL` 覆盖；启动前会自动对目标库建表并写入幂等种子，新环境无需手工初始化。
+
+工作台脚本默认连接 `127.0.0.1:55433/esimage`（与 `docker compose` 和 `.env.example` 一致）。并行开发时建议为本模块使用独立库，例如：
 
 ```bash
 docker exec esimage-postgres psql -U esimage -d postgres -c "CREATE DATABASE esimage_workspace"

@@ -9,8 +9,8 @@ from pathlib import Path
 TEST_DB_HOST = os.getenv("TEST_DB_HOST", "127.0.0.1")
 TEST_DB_PORT = os.getenv("TEST_DB_PORT", "55433")
 # 同设备可能有多个 agent 克隆共用 55433 的 PostgreSQL；
-# 3 号使用独立测试库，避免并行测试互相清表。
-TEST_DB_NAME = os.getenv("TEST_DB_NAME", "esimage_chat_test")
+# 管理后台整合分支使用独立测试库，避免并行测试互相清表。
+TEST_DB_NAME = os.getenv("TEST_DB_NAME", "esimage_admin7_test")
 TEST_DB_USER = os.getenv("TEST_DB_USER", "esimage")
 TEST_DB_PASSWORD = os.getenv("TEST_DB_PASSWORD", "esimage")
 
@@ -66,8 +66,6 @@ def prepared_database():
 
     from app import models  # noqa: F401  注册模型
     from app.core.database import Base, SessionLocal, engine
-    from app.modules.admin.chat_records.seed import seed_chat_records
-    from app.modules.admin.seed import seed_config
     from app.modules.auth.seed import seed
 
     print("[测试] 重建测试表结构……")
@@ -75,18 +73,16 @@ def prepared_database():
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         seed(db)
-        # 8 号：8 个 Agent 提示词、版本 1、默认模型配置与会话夹具
-        seed_config(db)
-        seed_chat_records(db)
     print("[测试] 测试数据库就绪。")
     yield
 
 
 @pytest.fixture(autouse=True)
 def reset_state():
-    """每个用例前：清空审计日志，恢复演示账号状态。"""
+    """每个用例前：清空审计日志与概览缓存，恢复演示账号状态。"""
     from app.core.database import SessionLocal
     from app.models import AuditLog, User
+    from app.modules.admin.dashboard.service import clear_dashboard_cache
 
     with SessionLocal() as db:
         db.execute(delete(AuditLog))
@@ -95,6 +91,7 @@ def reset_state():
             user.token_version = 0
             user.last_login_at = None
         db.commit()
+    clear_dashboard_cache()
     yield
 
 

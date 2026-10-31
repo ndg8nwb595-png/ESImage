@@ -987,3 +987,95 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 - 修复提示词版本 1 补写：仅当 `current_version <= 1` 时补写，避免旧库升级时伪造历史；`created_by` 记为 `demo_super`。
 - 修复 `decrypt_api_key`：捕获 `cryptography.exceptions.InvalidTag`，统一转为 `ModelConfigCryptoError`。
 - 修复后：`tests/test_admin_chat_records.py` **7 passed**；curl 冒烟再次全部通过。
+
+### 与最新 main 的合并冲突（2026-10-31）
+
+- `backend/app/modules/admin/router.py`：采用 main 的混合前缀方案；仅挂载 `chat_records`，不再挂载 `content/chat_router.py`。
+- `backend/app/modules/admin/content/router.py`：采用 main 的 7 号重构版本（已不含聊天路由）。
+- `backend/app/modules/admin/content/chat_router.py`：按用户确认保留文件但不注册，README 标注 legacy。
+- `.claude/` 五个记忆文档：双方内容全部保留，并更新最终路由口径与重复实现处理。
+- 合并后需重跑全量测试，确认 main 新增的 `test_admin_accounts.py` / `test_admin_content.py` 与 8 号测试同时通过。
+## 2026-10-31 会话 17：管理后台-账号与权限后端实现
+
+### 基线问题修复
+
+1. `backend/app/modules/admin/router.py`：原写法 `from app.modules.admin.accounts import router` 导入的是子模块而非 APIRouter，FastAPI 启动即报 `AttributeError: module ... has no attribute '_contains_router'`；改为 `from app.modules.admin.accounts.router import router`。
+2. 同一文件：管理端路由原挂在 `/api/v1/users` 等路径，缺少 `/admin` 前缀；改为汇总 `APIRouter(prefix="/admin")`，OpenAPI 现有 36 条 `/api/v1/admin/*` 路由。
+
+### 种子与鉴权
+
+3. `backend/app/modules/auth/seed.py`：
+   - 23 个权限点的名称、类型、分组按 6 号接口文档（分组仅「用户端 / 管理后台」）。
+   - `admin` 默认 13 个、`user` 默认 4 个；`super_admin` 不再写 `role_permissions`。
+   - 新增 `demo_super`（密码 `Demo1234`）。
+4. `backend/app/core/deps.py`：
+   - 超管角色直接返回全部 23 个权限码，不读 `role_permissions`。
+   - 校验顺序改为「账号状态（20004）先于 token_version（20003）」，对齐 6 号接口文档 §1.4。
+5. `backend/app/core/audit.py`：`write_audit` 新增可选 `target_type` / `target_id`，已有调用不传时行为不变。
+
+### 账号与角色接口
+
+6. `backend/app/modules/admin/accounts/router.py`：
+   - 列表 `page<1` 按 1 处理；`page_size` 仅 20/50/100；日期范围、角色、状态、关键词错误码对齐文档。
+   - 新建/编辑：五种角色组合、管理员不能分配超管、管理员不能改其他管理员角色、自己不能改角色/状态、超管不能移除自己的超管角色、最后可用超管保护、禁用时递增 `token_version`。
+   - 重置密码：任何人不能重置自己（走个人中心），管理员不能重置超管；旧 token 失效。
+   - 禁用/启用/软删除/恢复：状态机与 30018、20006、20007、30011 对齐；重复禁用/启用返回 200 且不重复写日志。
+   - 所有账号写操作写 `target_type=account`、`target_id=用户名`；编辑记录 before/after；重置密码 detail 只含 `user_id`/`username`。
+   - 账号/角色写操作失败时写 `result=failed` + `detail.reason`，用独立事务提交（先 rollback）。
+   - 角色权限保存：超管角色 403、未知角色 10003、未知权限码 10003、超管专属 30015、最低权限 30015、去重、返回角色对象、动作码 `role.update`。
+7. `backend/app/modules/admin/accounts/schemas.py`：`permissions` 允许为空，便于返回 10002「请选择权限点」。
+
+### 操作日志接口
+
+8. `backend/app/modules/admin/audit/router.py`：
+   - 同时接受 `operator` / `start_time` / `end_time` 与 `keyword` / `created_from` / `created_to`。
+   - `result` 支持 `success` / `failed` / `all`；操作人关键词 ≤20；时间范围错误 10003。
+   - 响应同时返回 `log_id`/`operator_user_id`/`operator_username` 与旧 `id`/`user_id`/`username_snapshot`。
+   - 详情不存在改为 404 `30019`「操作日志不存在」。
+
+### 测试与验收
+
+9. 新增 `backend/tests/test_admin_accounts.py`（10 个用例）：权限目录、列表筛选、新建校验、详情边界、编辑边界、重置密码、禁用启用删除恢复、角色权限、日志双契约。
+10. 更新 `backend/tests/test_auth.py`：`demo_dual` 权限断言由 5 个改为 17 个（用户端 4 + 管理员 13）。
+11. 新增 `backend/scripts/curl_admin_smoke.sh`：13 个接口 + 权限边界 + 日志双兼容；默认 8016 端口、`esimage_admin` 库。
+12. `.gitignore` 新增 `backend/.curl_admin_tmp/`。
+
+### 验证结果
+
+- `TEST_DB_NAME=esimage_admin_test pytest -q`：**95 passed**。
+- curl 真实服务：登录、`/auth/me`、用户列表/筛选、新建、重复用户名 30010、非法组合 30009、管理员建超管 20005、详情、编辑、管理员改自己角色 20007、管理员看超管 20006、重置密码与旧 token 20003、禁用 20004、启用、删除、已删除筛选、用户名复用 30010、恢复、角色读取、权限保存与恢复、超管专属 30015、日志文档参数/旧参数/详情/30019、管理员越权 20005、超管自禁用 20007，全部通过。
+- OpenAPI 校验：36 条 `/api/v1/admin/*` 路由，6 号 13 个接口全部在列。
+
+### 代码审查修复（第二轮）
+
+1. **已删除账号绕过恢复**：`PATCH /admin/users/{id}` 对 `status=deleted` 的账号统一返回 409 `30018`，必须先走 restore，避免 `status=active` 但 `deleted_at` 非空的卡死状态。
+2. **编辑边界按值判断**：前端编辑弹窗总是提交 `display_name/roles/status`；改为只有当角色集合或状态值真正变化时才拦截（20007/20005），未变化的字段原样提交不再误拦。
+3. **纯空格密码**：新建账号拒绝纯空格密码（10002），与接口文档 §5.1「不可为纯空格」一致。
+4. **种子收敛系统目录**：`_ensure_permission` / `_ensure_role` 对已存在的权限点/角色更新名称、类型、分组、`is_super_only`、描述；仍不覆盖密码与 `role_permissions`。已有旧库重跑种子后 6 号权限目录才真正生效。
+5. **404 失败审计**：`_get_target_user` 统一写 `result=failed` + `detail.reason=用户不存在`，移除 `log_failure=False` 死分支。
+6. **统计 N+1**：用户列表改为按当前页 user_id 批量聚合（图片、会话、Token、失败任务共 4 条 SQL），详情复用同一函数；Token 归属优先 `session.user_id` 再 `batch.user_id`。
+7. **冒烟脚本自初始化**：`curl_admin_smoke.sh` 启动服务前对目标库执行 `init_db.py` + `seed.py`，新环境按 README 直接运行即可。
+8. **无请求体**：新建/编辑/重置密码在无 body 时也返回文档约定的 10002，而不是框架 422。
+9. 移除未使用的 `_forbid_admin_on_super` 死代码。
+
+### 最终验证
+
+- `pytest -q`：**98 passed**（含 13 个 6 号管理端用例）。
+- `curl_admin_smoke.sh` 连续两次执行：40 项 HTTP 检查、17 项业务码检查，0 失败；脚本会自动建表/种子。
+- 审查意见中保留 1 项：`PUT /admin/roles/{code}/permissions` 成功返回角色对象（接口文档 §10.2 要求），前端 `api.ts` 类型仍写 `Promise<null>` 但运行时忽略返回值；按「只做后端」未改前端。
+
+### 合并最新 main（第二轮，9 号契约 + 7 号管理端整合）
+
+1. 两次合并 `origin/main`（`9ea5316`、`f42bf1e`），冲突集中在 `core/deps.py`、`admin/router.py`、`auth/seed.py`、`test_contract.py`。
+2. `core/deps.py`：保留上游 `user_id_var` 结构化日志，同时保留「账号状态先于 `token_version`」与超管全量权限。
+3. `admin/router.py`：采用并行 agent 的「dashboard/tokens/content 自带 `/admin` 前缀 + 其余子路由 `prefix="/admin"`」方案，避免双重前缀；保留 `chat_content_router` 与 `chat_records_router`。
+4. `auth/seed.py`：保留 6 号文档版 23 权限目录、超管不落行、收敛逻辑；合并上游 `demo_user2`，删除重复的 `demo_super`。
+5. 用户统计改用并行 agent 的 `accounts/service.py::build_user_stats`（批量聚合，Token 口径为 success + 有 Token 的 failed），删除本分支内联聚合。
+6. 9 号契约：`PERMISSION_MAP` 与 `test_contract.py` 的管理端路径统一为 `/api/v1/admin/*`，`demo_super` 密码统一 `Demo1234`（与 `f42bf1e` 重叠）。
+7. 全量 `pytest`：**171 collected，169 passed，2 failed**。两个失败均来自 11 号 `tests/test_ops.py`，已在干净 `origin/main` 工作树复现，与本次改动无关：
+   - `test_request_id_invalid_regenerated`：httpx2 无法把中文 `X-Request-ID` 编码为 ASCII 头。
+   - `test_selftest_pure`：monkeypatch 了不存在的 `ops_tasks.delay_ms`。
+   按「不触碰不相关内容」未修改，已在汇报中标注。
+8. curl 复验：40 项 HTTP + 17 项业务码检查 0 失败；OpenAPI 36 条 `/api/v1/admin/*` 路由，无 `/admin/admin` 双重前缀。
+9. chrome-devtools MCP 已连接并打开 `http://127.0.0.1:8016/api/docs`：Swagger UI 展示 `admin-accounts`（11 个）、`admin-audit`（2 个）等分组，控制台无 error/warn；截图已留存。
+10. 冒烟脚本就绪探测从 `/openapi.json` 改为 `/api/openapi.json` 并加 `-f`（9 号契约迁移后旧路径 404，curl 仍返回 0 会误判）。

@@ -24,6 +24,7 @@ from app import models  # noqa: F401  确保模型已注册
 from app.core.database import Base, SessionLocal, engine
 from app.modules.admin.chat_records.seed import seed_chat_records
 from app.modules.admin.seed import seed_config
+from app.modules.admin.seed_content import seed_admin_content
 from app.modules.auth.seed import seed
 from app.modules.history.seed import seed_history
 
@@ -38,6 +39,8 @@ def main() -> None:
         seed_chat_records(db)
         # 历史作品最小 demo 夹具；重复执行时按 client_request_id 跳过
         seed_history(db)
+        # 7 号管理后台内容夹具；demo_user / demo_user2 / demo_super
+        seed_admin_content(db)
     print("[种子] 完成。")
 
 

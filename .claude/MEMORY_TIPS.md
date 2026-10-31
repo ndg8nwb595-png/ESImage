@@ -161,7 +161,7 @@
 - **并行 agent 的测试库要隔离**：同设备多个克隆共用 55433 PostgreSQL 时，测试库默认名相同会互相清表；本仓库改用 `esimage_chat_test`，并用 `TEST_DB_NAME` 可覆盖。
 - **模型调用不要放在进程锁里**：真实模型时延会把所有工作台写操作串行化；本次把规划/商品理解调用放进 SSE 流内，锁只覆盖会话/用户消息/回复占位的创建。
 - **中文 JSON 在 Windows Git Bash 下用 `--data-binary @文件`**：Python 写 UTF-8 文件时不要用 `/tmp` 绝对路径（Python 与 Git Bash 的 `/tmp` 映射不同），用仓库内相对目录或 `$TEMP`。
-- **管理后台路由漏了 `/admin` 前缀**：`admin/router.py` 若只是 `APIRouter()`，子路由会注册成 `/api/v1/chat/*`、`/api/v1/prompts/*`；必须 `APIRouter(prefix="/admin")`。用 `app.openapi()["paths"]` 快速核对真实路径。
+- **管理后台路由前缀只能在一处加**：`dashboard`/`tokens`/`content` 子路由自带 `/admin`；其余在 `include_router(..., prefix="/admin")` 时加，汇总层保持 `APIRouter()`。用 `app.openapi()["paths"]` 检查是否出现 `/admin/admin` 或缺少 `/admin`。
 - **管道里 Python 解析含中文的 JSON 要设 `PYTHONIOENCODING=utf-8`**：Windows 下不设会把 UTF-8 输入按本地编码解码，`json.load` 报 `Expecting property name enclosed in double quotes`，raw 响应本身是合法的。
 - **curl 发送中文 JSON 不要用 `-d '中文'`**：Git Bash 可能按本地编码传字节，FastAPI 返回 `{"detail":"There was an error parsing the body"}`；先用 Python 写 UTF-8 文件，再 `--data-binary @file`。
 - **共享库种子按 `(user_id,title)` 幂等会“跳过”旧的同名测试会话**：如果旧会话已存在但数据不完整，种子不会补齐；验证标准夹具优先用独立测试库（`esimage_chat_test`），不要直接改共享行（会被权限策略拒绝）。
@@ -171,3 +171,24 @@
 - **`around_id` 的补齐口径要用“实际取到的更早条数”**：接口文档 §4.2 步骤 3 是 `limit - 1 - 已取更早条数`，不是固定 `floor((limit-1)/2)`；否则锚点靠前时会少于 `limit`，且前端没有加载更新消息的游标。
 - **AESGCM.decrypt 密钥不匹配抛 `InvalidTag`**：它不继承 `ValueError`；解密封装必须显式捕获，否则会漏到全局 500 而不是业务加密错误。
 - **种子补历史版本要防止伪造**：当前版本 > 1 且缺少 v1 时，不要用当前内容补 v1；只在 `current_version <= 1` 时补写。
+
+- **`from package import router` 可能导入子模块而不是 APIRouter**：当 `package/__init__.py` 为空且存在 `package/router.py` 时，拿到的是模块对象；FastAPI 注册会报 `_contains_router`。必须写 `from package.router import router`。
+- **汇总路由要显式加模块前缀**：子路由只写 `/users` 时，`include_router` 不带 prefix 会挂到 `/api/v1/users`；文档要求 `/api/v1/admin/users` 时，在汇总 `APIRouter(prefix="/admin")` 上统一加，避免逐个接口改。
+- **合并到 main 前先看远端是否已被并行 agent 推进**：`git fetch` 后对比 `origin/main` 的 `git log` 与 `git diff --stat`；本次 main 已包含同模块实现，直接重写会重复劳动，应先审计差距再补。
+- **超管权限不要依赖 `role_permissions` 行**：种子写入行会让「角色权限页不可编辑」和「角色即时全量授予」产生双份真相；鉴权层按角色返回全部权限码，种子不写超管行。
+- **鉴权顺序会决定错误码**：账号同时被禁用且 `token_version` 变化时，先查状态返回 20004，先查版本返回 20003；6 号文档要求状态优先，改顺序前先确认所有调用方。
+- **契约冲突优先做双兼容，而不是删旧字段**：已合并前端使用 `keyword/created_from` 与 `id/user_id`，6 号文档使用 `operator/start_time` 与 `log_id/operator_user_id`；两套都接受/返回，curl 与前端都不坏。
+- **失败审计要独立事务**：在业务事务里写失败日志会随异常回滚丢失；先 `rollback()`，再写日志并 `commit()`，最后抛业务异常，避免把未提交的字段改动一起提交。
+- **测试清理用户要先删审计日志**：`audit_logs.user_id` 是 RESTRICT 外键，测试账号登录过就会引用它；清理顺序为「审计日志 → user_roles → users」。
+- **ISO 时间放进 query string 要把 `+` 编码成 `%2B`**：`+08:00` 中的 `+` 会被服务端解析为空格，`fromisoformat` 直接失败；curl 脚本里用 `${var//+/%2B}` 预处理。
+- **浏览器 MCP 被其他 agent 占用时不要杀进程**：chrome-devtools 报 “browser is already running for profile” 时，先用 OpenAPI + curl 完成后端验收，避免影响同设备并行会话。
+- **PATCH 不能成为软删除的后门**：只校验「status 只能是 active/disabled」不够；已删除账号若允许 `PATCH status=active`，会得到 `deleted_at` 仍非空的可登录账号。编辑接口要显式拒绝 `status=deleted` 的目标。
+- **边界校验按“值变化”而不是“字段出现”**：前端编辑弹窗通常总是提交全部字段，按字段存在判断会把“只改显示名”误判为“改角色/状态”，导致 20007/20005。
+- **用户列表统计不要按行查**：每行 4 条聚合在 `page_size=100` 时约 400 条 SQL；用当前页 user_id 批量 group by，Token 用 `COALESCE(session.user_id, batch.user_id)` 避免重复归属。
+- **幂等种子也要收敛系统目录**：只“存在即跳过”会让改名/改分组永远不生效；权限点/角色这类系统元数据应更新，密码与角色权限关联才应保留。
+- **冒烟脚本要自包含**：默认连一个专用库时，脚本应先 `init_db + seed`，否则新环境按 README 跑会在登录时因表不存在返回 500。
+- **无 body 的 POST/PATCH 会被 FastAPI 返回 422**：需要文档约定的 10002 时，把请求模型设为可选并 `payload = payload or Model()`。
+- **并行 agent 可能已经修了同一个问题**：本次合并时远端已出现「管理端 OpenAPI 路径 + demo_super 密码」的同类修复；合并前先 `git fetch` 看提交标题与 diff，能复用就复用，避免重复实现。
+- **汇总路由前缀只能加一次**：子路由若自带 `/admin`，汇总层再加 `prefix="/admin"` 会得到 `/admin/admin`；用 OpenAPI 检查 `"/admin/admin" in path` 作为回归断言。
+- **合并后先确认测试失败是否来自自己**：用 `git worktree add <tmp> origin/main` 在干净 main 上跑同一用例；本次 2 个 `test_ops` 失败在 main 上同样存在，按范围不修改，只汇报。
+- **测试清理名单要跟随种子变化**：上游新增 `demo_user2` 后，按「非种子用户」清理的测试夹具会误删它；种子账号集合要集中维护。

@@ -309,7 +309,8 @@
 ## 8 号管理后台-聊天记录（2026-10-31 用户确认）
 
 - **模块边界**：聊天记录独立到 `backend/app/modules/admin/chat_records/`；模型配置与系统提示词继续留在 `admin/prompts/`（均属「Agent 配置」）。聊天接口从 `admin/content/router.py` 迁出，URL 不变，7 号内容追溯不受影响。
-- **路由前缀**：`admin/router.py` 使用 `APIRouter(prefix="/admin")`，所有管理后台接口最终为 `/api/v1/admin/*`；导入必须显式写 `from app.modules.admin.xxx.router import router`。
+- **路由前缀（合并后最终口径）**：`admin/router.py` 使用 `APIRouter()`；`dashboard` / `tokens` / `content` 子路由自带 `/admin` 前缀；`accounts`、`assets`、`prompts`、`audit`、`chat_records` 在 `include_router` 时加 `prefix="/admin"`。禁止在汇总层再加 `prefix`，否则会出现 `/admin/admin`。导入必须显式写 `from app.modules.admin.xxx.router import router`。
+- **重复实现处理**：并行 agent 曾把旧聊天实现放在 `content/chat_router.py` 并与 `chat_records` 同时挂载；合并后只挂载 `chat_records`，旧文件保留但不注册，避免同一路径被先注册的旧实现覆盖。
 - **加密密钥**：`MODEL_CONFIG_ENCRYPTION_KEY` 为 base64 编码的 32 字节；与 11 号部署模板的 `ENCRYPTION_KEY` 双名兼容（优先前者、回退后者）；两者都缺失或长度不符时应用启动失败。测试与 `.env.example` 使用固定演示密钥；生产必须替换。
 - **模型配置**：AES-256-GCM，存储 `base64(12 字节 nonce + ciphertext + tag)`；只返回 `sk-****abcd` 脱敏值；省略/空 `api_key` 表示不修改；审计只记录 `changed_fields` 与 `api_key_changed`。
 - **聊天可见范围**：管理员在接口层排除拥有 `super_admin` 角色的账号；越权统一 403 `20005`（不用 `20006`）；聊天记录任何角色只读，不提供发送/编辑/删除/导出/恢复入口。
@@ -317,3 +318,27 @@
 - **提示词版本**：保存 `current_version+1` 并设为当前；回滚复制目标版本内容再生成新版本，不删除历史；行锁 + 后保存者覆盖；变量语法 `{{变量名}}`，允许两侧空格，区分大小写。
 - **种子**：以 `(user_id, title)` 识别会话，已存在则跳过其子数据；8 Agent 种子补版本 1；默认模型配置 1 条；`demo_super` 为演示超管。
 - **环境复用**：复用 `esimage-postgres`（55433）；8000 被 DynamoDB Local 占用，本模块联调使用 8010。共享库存在同名旧会话时，种子按约定跳过，不覆盖他人数据。
+## 管理后台-账号与权限后端实现约定（2026-10-31 用户确认）
+
+- **模块位置**：账号与角色放 `backend/app/modules/admin/accounts/`，操作日志放 `backend/app/modules/admin/audit/`；复用已有骨架，不新增顶层模块。
+- **路由前缀**：汇总路由 `backend/app/modules/admin/router.py` 使用 `APIRouter(prefix="/admin")`，`main.py` 挂 `/api/v1`；子模块 `__init__.py` 为空，必须从 `xxx.router` 导入 router 对象。
+- **种子**：`modules/auth/seed.py` 是 23 个权限点的唯一来源；`user` 4 个、`admin` 13 个、`super_admin` 不写 `role_permissions`；新增 `demo_super`。重复执行不覆盖已有数据。
+- **鉴权**：`core/deps.py` 中超管按角色即时授予全部权限码；校验顺序为签名 → 过期 → 用户存在 → 账号状态（20004）→ `token_version`（20003）→ 权限码（20005）。
+- **统计口径**：内容表已接入，用户统计返回真实值且 `stats_available=true`（用户选择，覆盖 6 号 demo 文档的 0/false 初值）。
+- **权限目录**：名称、类型、分组按 6 号接口文档；`group_name` 只有「用户端 / 管理后台」，角色管理页平铺展示。
+- **操作日志双兼容**：请求同时接受文档参数与前端旧参数；响应同时返回文档字段与旧字段，避免破坏已合并的前端。
+- **审计**：账号写操作必须带 `target_type=account`/`target_id=用户名`；角色权限带 `role`/角色 code；编辑记录 before/after；失败操作独立事务写 `result=failed` 与 `detail.reason`；不记录密码。
+- **本地环境**：复用并行 agent 的 `esimage-postgres`（55433）；本模块使用 `esimage_admin` 开发库、`esimage_admin_test` 测试库；8001 被 3 号占用，6 号 curl 用 8016。
+- **分支**：`feat/admin-accounts-backend-demo`；骨架先推送并 `--ff-only` 合并 `main`，业务代码验证后再合并。
+- **编辑边界按值判断**：前端编辑弹窗总是提交 `display_name/roles/status`；后端只在角色集合或状态值真正变化时触发 20007/20005，避免「原样提交」被误拦。
+- **已删除账号**：`PATCH /admin/users/{id}` 一律 409 `30018`，必须走 restore；禁止出现 `status=active` 但 `deleted_at` 非空的中间态。
+- **统计查询**：列表按当前页 user_id 批量聚合（4 条 SQL），详情复用同一函数；Token 归属优先 `session.user_id`，其次 `batch.user_id`。
+- **种子收敛**：权限点/角色名称、类型、分组、`is_super_only` 属于系统目录，重跑种子会更新；密码与 `role_permissions` 仍不覆盖。
+- **失败审计**：404 与账号/角色业务失败都写 `result=failed` + `detail.reason`；`require_permission` 的 20005 不另加未定义动作码，避免超出文档动作清单。
+- **无请求体**：新建/编辑/重置密码无 body 时返回 10002，而不是框架 422。
+- **冒烟脚本**：`curl_admin_smoke.sh` 自带建表与幂等种子，新环境可直接运行。
+- **路由前缀（合并后最终口径）**：`admin/router.py` 使用 `APIRouter()`；`dashboard` / `tokens` / `content` 子路由自带 `/admin` 前缀，其余（accounts、assets、prompts、audit、chat_content、chat_records）在 `include_router` 时加 `prefix="/admin"`。禁止在汇总层再加 `prefix`，否则出现 `/admin/admin`。
+- **统计复用**：用户列表/详情统一调用 `modules/admin/accounts/service.py::build_user_stats`（批量聚合，Token 口径 success + 有 Token 的 failed），不再在 router 内联聚合。
+- **9 号契约**：`modules/contract/openapi.py::PERMISSION_MAP` 的管理端路径必须与 `/api/v1/admin/*` 一致；`demo_super` 统一密码 `Demo1234`。
+- **测试库**：本模块用 `TEST_DB_NAME=esimage_admin_test`；上游 conftest 默认库为 `esimage_admin7_test`，并行运行时用环境变量覆盖。
+- **已知非本模块失败**：11 号 `tests/test_ops.py` 的 2 个用例在干净 `origin/main` 也失败（httpx2 中文头、`delay_ms` monkeypatch），不修改。

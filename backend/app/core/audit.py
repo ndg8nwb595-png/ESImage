@@ -32,7 +32,11 @@ def write_audit(
     target_type: str | None = None,
     target_id: str | None = None,
 ) -> None:
-    """写一条审计日志；不包含密码、JWT 等敏感信息。"""
+    """写一条审计日志；不包含密码、JWT 等敏感信息。
+
+    target_type / target_id 为 6 号文档 §2.5 要求的对象类型与对象标识，
+    例如 account / zhangsan、role / admin。
+    """
     db.add(
         AuditLog(
             user_id=user_id,

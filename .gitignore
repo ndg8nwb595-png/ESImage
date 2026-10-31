@@ -22,6 +22,9 @@ dist/
 backend/storage/
 backend/.pytest_storage/
 backend/.curl_tmp/
+backend/.curl_admin_tmp/
+backend/.curl_contract_tmp/
+backend/.curl_tmp_admin7/
 
 # 日志与临时文件
 *.log

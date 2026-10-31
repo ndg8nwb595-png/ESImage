@@ -32,4 +32,5 @@ class ResetPasswordRequest(BaseModel):
 class RolePermissionsRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    permissions: list[str]
+    # 允许为空以返回接口文档要求的 10002「请选择权限点」，而不是框架 422
+    permissions: list[str] | None = None
