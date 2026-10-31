@@ -232,3 +232,13 @@
 - **额外接口**：实现 `GET /images/{id}/thumbnail`，因为批次响应里的 `thumbnail_url` 需要可读取；与 5 号文档约定一致，不影响 2 号已有接口。
 - **本地数据库复用**：并行开发共用已运行的 `esimage-postgres`（55433）；本模块使用独立库 `esimage_workspace`、测试库 `esimage_workspace_test`，不覆盖其他项目的库。
 - **curl 编码**：Windows Git Bash 下中文 JSON 不能直接放进 `-d`；统一用 Python 生成 UTF-8 文件 + `--data-binary @文件`。
+
+## Agent 会话交互后端实现约定（2026-10-31 用户确认）
+
+- **模块位置**：3 号后端统一放在 `backend/app/modules/chat/`，不改动 `modules/auth/` 内部实现。
+- **前置依赖**：3 号 demo 只做 2 号 demo 04 的增量；会话列表、首条消息建会话、SSE 骨架、自动命名、幂等由 2 号 `feat/workspace-backend-demo` 提供。
+- **当前阻塞**：`main` 尚无 2 号 demo 04 的可运行代码（2 号 agent 的 `workspace/sessions.py` 等仍为同设备另一工作区的未提交改动）。用户选择「等 2 号合并后再做」，不复制、不触碰对方未提交代码。
+- **合并节奏**：先提交并推送 `chat` 模块目录骨架到 `feat/agent-chat-backend-demo`，`--ff-only` 合并 `main`；业务代码待 2 号 04 合并 `main` 后再在功能分支开发并验证。
+- **模型复用**：3 号不重复定义 `creative_sessions`/`chat_messages`/`agent_runs`/`generation_batches` 等表；开发时直接复用 2 号提供的 `app/models/workspace.py`，避免两套 ORM 导致建表冲突。
+- **环境复用**：本地 PostgreSQL 复用并行 agent 已启动的 `esimage-postgres`（宿主端口 55433）；8000 端口被 1 号登录 demo 的 uvicorn 占用，3 号调试改用其他端口。
+- **网络限制**：当前 `github.com:443` 连接超时，`git fetch/push` 失败；骨架提交已本地完成并合并 `main`，推送待网络恢复后补做。

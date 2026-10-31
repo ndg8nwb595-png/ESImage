@@ -208,3 +208,13 @@
 - Windows Git Bash 坑：`curl -d '{"中文":...}'` 会被终端按本地编码处理导致后端 400；脚本改为 Python 生成 UTF-8 JSON 文件并用 `curl --data-binary @文件`。
 - 收尾：独立审查发现并发幂等、OOM 边界、SSE 断线、校验文案等问题，已全部修复并复测；提交 `7595e31`，强制更新功能分支后 `--ff-only` 合并到 `main` 并推送。
 - 最终验证：全量 `pytest` **59 passed**；`curl_smoke.sh` 逐条调通全部工作台接口。
+
+## 2026-10-31 会话 15：Agent 会话交互后端（骨架与前置等待）
+
+- 用户调用 `/mattpocock-skills:implement` + `/code-change-workflow`，要求连接 chrome-devtools MCP、新建分支、建模块文件夹、开发 `docs/prd/3-Agent会话交互` 后端，并保证每个接口可 curl；提醒同设备有并行 agent，调试时复用其进程（尤其 docker）。
+- 调查结论：`main` 仅有登录模块；远端 `feat/workspace-backend-demo` 只有骨架；同设备 2 号工作区正在写 `workspace/sessions.py`、`models/workspace.py` 等未提交代码。3 号依赖的 2 号 demo 04 无已提交实现。
+- 向用户提供三版方案，用户选择「等 2 号合并后再做」，并确认合并节奏为「先骨架后开发」。
+- 已完成：新建 `feat/agent-chat-backend-demo`；新增 `backend/app/modules/chat/README.md`；提交 `19428da`；本地 `--ff-only` 合并 `main`。
+- 阻塞：`github.com:443` 超时，分支与 main 均未能 push；`api.github.com` 可通。
+- 环境：复用 `esimage-postgres`（55433）；chrome-devtools MCP 已连接；8000 端口属于 1 号登录 demo，后续用 8001。
+- 下一步：监视 2 号 `feat/workspace-backend-demo` 是否提交并合并；网络恢复后先补推骨架，再实现 3 号增量并 curl 验证。

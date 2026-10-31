@@ -111,3 +111,8 @@
 - **只加普通 `SELECT` 去重挡不住并发**：首条消息无 `session_id` 时唯一索引是 `(session_id, client_message_id)`，两个并发请求会各建会话；需进程内锁或用户维度唯一约束。
 - **宽高/图片像素必须设上限**：演示管线按请求宽高 `Image.new`，上传按解码像素分配内存；不加限制时一个大尺寸请求就能 OOM，后台任务的 try/except 救不回来。
 - **`completed` 与 `is_history_visible` 要同事务**：先提交 completed 再置可见，会出现「前端看到完成但下载 30005」的窗口。
+
+- **多工作区并行开发先查同设备兄弟目录**：`coding/1-登入界面`、`coding/2-用户端创作工作台`、`coding/3-Agent会话交互` 是同一仓库的不同克隆；远端分支可能只有骨架，真正的进行中代码在兄弟目录的未提交工作区里。开发前先 `ls` + `git -C <sibling> status --short`，不要以为远端分支就是全部现状。
+- **跨模块 demo 的前置缺失要先裁决**：3 号 demo 依赖 2 号 demo 04，但 2 号未提交时，直接开发会重复建表/重复路由；按用户选择等待前置合并，或明确「自带基线」并记录合并策略，不能默默复制他人未提交代码。
+- **`github.com:443` 超时但 `api.github.com` 可通**：`gh api` 可能正常，`git fetch/push` 仍失败；先分别用 `curl -I https://github.com` 与 `curl -I https://api.github.com` 判断，不要误判为凭据问题。
+- **端口归属先查进程命令行**：`netstat` 看到 8000 监听不代表是自己的服务；用 `Get-CimInstance Win32_Process -Filter "ProcessId=<pid>"` 查 `CommandLine`，本次 8000 属于 `coding/1-登入界面` 的 uvicorn，3 号应改用 8001。

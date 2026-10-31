@@ -245,3 +245,18 @@
 | 测试 | 完成 | `tests/test_workspace.py` 20 个用例；全量 `pytest` 51 passed |
 | 独立审查 | 完成 | 只读审查 agent 发现并发幂等、OOM 边界、SSE 断线、校验文案等问题；已修复并复测 |
 | 提交与合并 | 完成 | 提交 `7595e31 feat: 实现创作工作台后端最小 demo 与 curl 验收`；推送功能分支并 `--ff-only` 合并到 `main`，远程 `main` 已更新 |
+
+## 2026-10-31 会话 15：Agent 会话交互后端实现（前置等待中）
+
+| 需求 | 状态 | 实现手段 |
+| --- | --- | --- |
+| 新建开发分支 | 完成 | `feat/agent-chat-backend-demo`，基于 `main` `e6a971b` |
+| 建立 chat 模块文件夹骨架 | 完成 | `backend/app/modules/chat/README.md`，记录定位、依赖、6 个计划接口与文件职责 |
+| 骨架推送功能分支 | 阻塞 | `github.com:443` 连接超时；本地提交 `19428da` 已完成 |
+| 骨架合并 main | 完成（本地） | `git merge --ff-only feat/agent-chat-backend-demo`，main 前进到 `19428da`；推送待网络恢复 |
+| 6 个接口业务实现 | 等待前置 | 依赖 2 号 demo 04；用户选择等 `feat/workspace-backend-demo` 合并 main 后再开发 |
+| curl 联调验证 | 未开始 | 待业务实现后执行 |
+
+- 已确认范围：只做后端；`PATCH/DELETE /sessions/{id}`、消息分页惰性超时、聊天 SSE 的 `meta.duplicate` 与 `done.requirement_changed`、轻链路与 10 轮上下文、`agent_runs` 落库、需求变化判定。
+- 明确不做：`POST /sessions`、会话恢复、取消接口、`agent_runs` 查询、消息搜索/导出、管理端聊天、聊天触发生图、真实内容审核与 Token 计费。
+- 环境：复用 docker `esimage-postgres`（55433）；chrome-devtools MCP 已连接（1 个 about:blank 页面），留作后端 OpenAPI/Swagger 验证。

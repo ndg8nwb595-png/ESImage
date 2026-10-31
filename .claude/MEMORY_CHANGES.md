@@ -714,3 +714,33 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 - rebase 后全量 `pytest` **59 passed**；`git push --force-with-lease origin feat/workspace-backend-demo` 成功。
 - `git merge --ff-only feat/workspace-backend-demo` 合并到 `main`，推送 `a476ac4..7595e31` 成功（GitHub 443 直连超时，使用 `git -c http.curloptResolve=github.com:443:140.82.112.3` 临时固定 IP）。
 - 未提交 `backend/.env`、`backend/storage/`、`backend/.curl_tmp/` 等本地文件（均已在 `.gitignore`）。
+
+## 2026-10-31 会话 15：Agent 会话交互后端模块骨架
+
+### 新增文件
+
+1. `backend/app/modules/chat/README.md` —— chat 模块定位、2 号 demo 04 前置、当前阻塞、6 个计划接口与计划文件职责。
+
+### 修改文件
+
+- 无（只新增模块说明，不改动既有代码与路由）。
+
+### 提交与合并
+
+- 新分支 `feat/agent-chat-backend-demo`，基于 `main` `e6a971b`。
+- 提交 `19428da chore: 建立 Agent 会话交互后端模块骨架`（1 文件，+37）。
+- 本地 `--ff-only` 合并到 `main`，`main` 前进到 `19428da`。
+- `git push -u origin feat/agent-chat-backend-demo` 失败：`Failed to connect to github.com port 443`；`curl https://github.com` 超时，`https://api.github.com` 可通。待网络恢复后补推分支与 main。
+
+### 环境与并发
+
+- 复用并行 agent 的 `esimage-postgres` 容器（healthy，宿主机 55433），未新建容器。
+- 8000 端口由 `coding/1-登入界面` 的 uvicorn 占用，3 号后续联调改用 8001。
+- 同设备 `coding/2-用户端创作工作台/ESImage` 的 `feat/workspace-backend-demo` 仍在开发 `workspace/sessions.py` 等未提交文件；本次未读取后复制、未修改其工作区。
+- chrome-devtools MCP 已连接，`list_pages` 返回 1 个 `about:blank` 页面。
+
+### 验证
+
+- `git log --oneline -3`：`19428da` → `e6a971b` → `ede918e`。
+- `git status --short`：干净。
+- 未运行 pytest（本次无业务代码）。
