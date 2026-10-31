@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.deps import AuthContext
+from app.core.deps import AuthContext, require_any_permission
 from app.core.response import ApiError, ok
 from app.models.workspace import CreativeSession, GeneratedImage, GenerationBatch, UploadedAsset
 from app.modules.workspace.pipeline import run_full_pipeline, run_sample_pipeline
@@ -38,6 +38,15 @@ from app.modules.workspace.storage import storage
 router = APIRouter(tags=["workspace"])
 
 FULL_IMAGE_COUNT = 6
+
+
+def _image_file_relative_path(image: GeneratedImage) -> str | None:
+    """归档件读 archive/ 前缀，否则读原路径（历史接口文档 §11）。"""
+    if not image.file_path:
+        return None
+    if image.archived_at is not None:
+        return f"archive/{image.file_path}"
+    return image.file_path
 
 
 def _sample_payload(db: Session, batch: GenerationBatch) -> dict:
@@ -411,16 +420,18 @@ def _get_owned_image(db: Session, user_id: int, image_id: int) -> GeneratedImage
 @router.get("/images/{image_id}/content")
 def get_image_content(
     image_id: int,
-    auth: AuthContext = Depends(require_permission("user.generate")),
+    auth: AuthContext = Depends(require_any_permission("user.history", "user.generate")),
     db: Session = Depends(get_db),
 ) -> FileResponse:
     """大图预览：示例图与正式图都可读，下载权限由下载接口单独控制。"""
     image = _get_owned_image(db, auth.user.id, image_id)
-    if not image.file_path:
+    relative_path = _image_file_relative_path(image)
+    if relative_path is None:
         raise ApiError(404, 30014, "文件不存在")
-    path = storage.path(image.file_path)
+    path = storage.path(relative_path)
     if not path.is_file():
-        raise ApiError(404, 30014, "文件不存在")
+        message = "文件归档中，请稍后重试" if image.archived_at is not None else "文件不存在"
+        raise ApiError(404, 30014, message)
     return FileResponse(
         path,
         media_type="image/png",
@@ -434,7 +445,7 @@ def get_image_content(
 @router.get("/images/{image_id}/thumbnail")
 def get_image_thumbnail(
     image_id: int,
-    auth: AuthContext = Depends(require_permission("user.generate")),
+    auth: AuthContext = Depends(require_any_permission("user.history", "user.generate")),
     db: Session = Depends(get_db),
 ) -> FileResponse:
     """结果网格缩略图（与 5 号文档的接口约定保持一致）。"""
@@ -471,12 +482,14 @@ def download_image(
     batch = db.get(GenerationBatch, image.batch_id)
     if batch is None or batch.status not in ("completed", "partially_failed"):
         raise ApiError(409, 30005, "当前图片不可下载")
-    if not image.file_path:
+    relative_path = _image_file_relative_path(image)
+    if relative_path is None:
         raise ApiError(404, 30014, "文件不存在")
 
-    path = storage.path(image.file_path)
+    path = storage.path(relative_path)
     if not path.is_file():
-        raise ApiError(404, 30014, "文件不存在")
+        message = "文件归档中，请稍后重试" if image.archived_at is not None else "文件不存在"
+        raise ApiError(404, 30014, message)
 
     role_label = "主图" if image.image_role == "main" else "详情图"
     filename = (

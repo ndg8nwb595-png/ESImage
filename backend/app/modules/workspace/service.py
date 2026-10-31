@@ -6,12 +6,10 @@ import threading
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Any, Callable
-
-from fastapi import Depends
+from typing import Any
 
 from app.core.config import settings
-from app.core.deps import AuthContext, get_current_auth
+from app.core.deps import require_permission  # 重新导出，供 workspace 各子路由复用
 from app.core.response import ApiError
 from app.models.workspace import CreativeSession
 
@@ -41,17 +39,6 @@ def workspace_lock():
     """串行化需要 check-then-act 的工作台写操作。"""
     with _WORKSPACE_LOCK:
         yield
-
-
-def require_permission(code: str) -> Callable[..., AuthContext]:
-    """生成权限校验依赖；缺少权限返回 403/20005。"""
-
-    def dependency(auth: AuthContext = Depends(get_current_auth)) -> AuthContext:
-        if code not in auth.permissions:
-            raise ApiError(403, 20005, "无权限")
-        return auth
-
-    return dependency
 
 
 def validate_product_name(value: str | None) -> str:

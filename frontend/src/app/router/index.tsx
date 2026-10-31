@@ -3,6 +3,7 @@ import { Navigate, createBrowserRouter } from 'react-router-dom'
 import AdminDashboardPage from '@/modules/admin/pages/DashboardPage'
 import ForbiddenPage from '@/modules/errors/pages/ForbiddenPage'
 import NotFoundPage from '@/modules/errors/pages/NotFoundPage'
+import HistoryDetailPage from '@/modules/history/pages/HistoryDetailPage'
 import HistoryPage from '@/modules/history/pages/HistoryPage'
 import ProfilePage from '@/modules/profile/pages/ProfilePage'
 import LoginPage from '@/modules/auth/pages/LoginPage'
@@ -32,6 +33,14 @@ export const router = createBrowserRouter([
             element: (
               <RequirePermission permission="user.history">
                 <HistoryPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/history/:batchId',
+            element: (
+              <RequirePermission permission="user.history">
+                <HistoryDetailPage />
               </RequirePermission>
             ),
           },

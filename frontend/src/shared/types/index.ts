@@ -120,3 +120,48 @@ export interface FullBatch {
   total_count: number
   status: string
 }
+
+export interface HistoryItem {
+  batch_id: number
+  product_name: string
+  main_count: number
+  detail_count: number
+  success_count: number
+  total_count: number
+  cover_image_id: number
+  cover_thumbnail_url: string
+  created_at: string
+}
+
+export interface HistoryListResponse {
+  items: HistoryItem[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface HistoryImage {
+  image_id: number
+  index: number
+  image_role: 'main' | 'detail'
+  width: number | null
+  height: number | null
+  thumbnail_url: string
+  content_url: string
+  created_at: string
+}
+
+export interface HistoryDetail {
+  batch_id: number
+  product_name: string
+  style_text: string | null
+  width: number
+  height: number
+  main_count: number
+  detail_count: number
+  success_count: number
+  total_count: number
+  status: string
+  created_at: string
+  images: HistoryImage[]
+}
