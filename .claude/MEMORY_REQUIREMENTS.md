@@ -411,3 +411,16 @@
 - 模板/素材/尺寸/提示词/模型配置的后台 CRUD（只读 + 种子）。
 - 上传图内容审核、历史作品页、个人中心、管理后台页面。
 - Celery/Redis/MinIO/Alembic；多实例与批次级重新生成。
+
+### 会话 16 复审补充
+
+| 复审项 | 状态 | 处理 |
+| --- | --- | --- |
+| 共享工具重复 | 已修复 | 新增 `app/core/common.py`，workspace/generation 共用 |
+| 单张重试并发窗口 | 已修复 | `pending` + `generating` 都计入，新增测试 |
+| 取消丢弃在途图 | 已修复 | 生图开始后允许当前张完成，完成后再检查取消 |
+| 重试忽略修复后提示词 | 已修复 | 优先使用 `image.prompt`，示例输出只补 whitespace/reference |
+| completed 后残留 error_message | 已修复 | 重试汇总按终态清空/设置 |
+| 上传图只传 2 张 | 已修复 | 最多 5 张上传 + 素材，参考图上限 6 |
+| pytest | 完成 | **76 passed** |
+| 真实 Seedream 验收 | 阻塞 | 429 SetLimitExceeded，待控制台调整额度 |

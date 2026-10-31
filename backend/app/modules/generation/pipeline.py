@@ -202,7 +202,7 @@ def _material_candidates(ctx: agents.AgentContext) -> list[dict[str, Any]]:
 
 
 def _upload_files(db, batch: GenerationBatch) -> list[bytes]:
-    """读取批次快照中的上传商品图，最多返回 2 张。"""
+    """读取批次快照中的全部上传商品图（最多 5 张），按提交顺序返回。"""
     upload_ids = _snapshot(batch).get("upload_ids") or []
     if not upload_ids:
         return []
@@ -217,7 +217,7 @@ def _upload_files(db, batch: GenerationBatch) -> list[bytes]:
     )
     by_id = {row.id: row for row in rows}
     files: list[bytes] = []
-    for upload_id in upload_ids[:2]:
+    for upload_id in upload_ids[:5]:
         row = by_id.get(upload_id)
         if row is None:
             continue
@@ -391,7 +391,7 @@ def _run_image_flow(
         fit_to_size(attempt.result.data, batch.width, batch.height)
     )
 
-    _checkpoint(ctx.db, batch, check_cancel=check_cancel, check_timeout=check_timeout)
+    _checkpoint(ctx.db, batch, check_cancel=False, check_timeout=check_timeout)
     vision_model = str(ctx.model_config.get("vision_model") or "")
     if not vision_model:
         agents.log_skipped(
@@ -434,7 +434,7 @@ def _run_image_flow(
                 )
             else:
                 issues = quality.get("issues") or ["质量审核未通过"]
-                _checkpoint(ctx.db, batch, check_cancel=check_cancel, check_timeout=check_timeout)
+                _checkpoint(ctx.db, batch, check_cancel=False, check_timeout=check_timeout)
                 _set_stage(ctx.db, batch, "repairer")
                 try:
                     repaired = agents.run_repairer(
@@ -474,7 +474,7 @@ def _run_image_flow(
                     fit_to_size(attempt.result.data, batch.width, batch.height)
                 )
 
-                _checkpoint(ctx.db, batch, check_cancel=check_cancel, check_timeout=check_timeout)
+                _checkpoint(ctx.db, batch, check_cancel=False, check_timeout=check_timeout)
                 _set_stage(ctx.db, batch, "quality_reviewer")
                 try:
                     recheck = agents.run_quality_reviewer(
@@ -502,7 +502,7 @@ def _run_image_flow(
                         _mark_image_failed(ctx.db, image, "质量问题未通过")
                         return False
 
-    _checkpoint(ctx.db, batch, check_cancel=check_cancel, check_timeout=check_timeout)
+    _checkpoint(ctx.db, batch, check_cancel=False, check_timeout=check_timeout)
     _set_stage(ctx.db, batch, "platform_rule")
     try:
         platform = agents.run_platform_rule(
@@ -531,7 +531,7 @@ def _run_image_flow(
         )
         return False
 
-    _checkpoint(ctx.db, batch, check_cancel=check_cancel, check_timeout=check_timeout)
+    _checkpoint(ctx.db, batch, check_cancel=False, check_timeout=check_timeout)
     _set_stage(ctx.db, batch, "text_composition")
     try:
         layout = build_default_layout(copy_block, batch.width, batch.height)
@@ -699,6 +699,8 @@ def run_sample_pipeline(batch_id: int) -> None:
                 )
                 return
 
+            # 生图开始后允许当前这张完成；完成后再检查取消，避免把在途图丢掉
+            _check_cancel(db, batch)
             recount_completed(db, batch)
             transition_batch(batch, "sample_ready")
             batch.stage = "done"
@@ -875,8 +877,9 @@ def run_full_pipeline(batch_id: int) -> None:
                 for image in current_success_images(db, batch.id):
                     if image.image_type == "final":
                         image.is_history_visible = True
-                if status == "partially_failed":
-                    batch.error_message = "部分图片生成失败"
+                batch.error_message = (
+                    "部分图片生成失败" if status == "partially_failed" else None
+                )
             else:
                 batch.error_message = "全部图片生成失败"
             db.commit()
@@ -932,6 +935,60 @@ def run_full_pipeline(batch_id: int) -> None:
 # ---------------------------------------------------------------- 单张重试/重生成
 
 
+def _finalize_regenerate(
+    db, batch: GenerationBatch, image: GeneratedImage, *, success: bool
+) -> None:
+    """重试结束后按当前图片结果汇总批次，并清理已恢复的批次错误。"""
+    db.refresh(batch)
+    recount_completed(db, batch)
+    if batch.status == "cancelled":
+        image.is_history_visible = False
+        batch.stage = "done"
+        db.commit()
+        return
+
+    target = summarize_full_status(db, batch)
+    try:
+        transition_batch(batch, target)
+    except Exception:
+        batch.status = target
+    batch.finished_at = _now()
+    if success and target in ("completed", "partially_failed") and image.status == "success":
+        image.is_history_visible = True
+    elif image.status != "success":
+        image.is_history_visible = False
+
+    if target == "completed":
+        batch.error_message = None
+    elif target == "partially_failed":
+        batch.error_message = "部分图片生成失败"
+    else:
+        batch.error_message = "全部图片生成失败"
+    batch.stage = "done"
+    db.commit()
+
+
+def _regenerate_prompt_item(
+    image: GeneratedImage, prompt_output: dict[str, Any] | None
+) -> dict[str, Any]:
+    """优先沿用图片自身保存的最终提示词（修复后的），再用示例提示词补齐参数。"""
+    if prompt_output is not None:
+        item = _prompt_item(prompt_output, image.index_no)
+    else:
+        item = {
+            "index": image.index_no,
+            "prompt": image.prompt or "",
+            "negative_prompt": image.negative_prompt or "",
+            "whitespace": {"top_ratio": 0.18, "bottom_ratio": 0.22},
+            "reference_asset_ids": [],
+        }
+    if image.prompt:
+        item["prompt"] = image.prompt
+        item["negative_prompt"] = image.negative_prompt or ""
+    item.setdefault("index", image.index_no)
+    return item
+
+
 def run_regenerate_pipeline(new_image_id: int) -> None:
     """单张重试/重生成：只执行生图及后续，不调用前四个 Agent。"""
     with SessionLocal() as db:
@@ -949,8 +1006,7 @@ def run_regenerate_pipeline(new_image_id: int) -> None:
             ctx, _ = _emit_context(db, batch)
             ctx.image = image
 
-            sample_outputs = _load_sample_outputs(db, batch)
-            plan, profile, copy_output, prompt_output = sample_outputs
+            plan, profile, copy_output, prompt_output = _load_sample_outputs(db, batch)
             if not all((plan, profile, copy_output, prompt_output)):
                 # 兜底：没有示例输出时，沿用图片自身的提示词，文案用最小占位
                 profile = {"category": None, "selling_points": []}
@@ -963,17 +1019,7 @@ def run_regenerate_pipeline(new_image_id: int) -> None:
                         }
                     ]
                 }
-                prompt_output = {
-                    "images": [
-                        {
-                            "index": image.index_no,
-                            "prompt": image.prompt or "",
-                            "negative_prompt": image.negative_prompt or "",
-                            "whitespace": {"top_ratio": 0.18, "bottom_ratio": 0.22},
-                            "reference_asset_ids": [],
-                        }
-                    ]
-                }
+                prompt_output = None
                 plan = {
                     "images": [{"index": image.index_no, "role": image.image_role}]
                 }
@@ -982,31 +1028,13 @@ def run_regenerate_pipeline(new_image_id: int) -> None:
                 ctx,
                 plan_item=_plan_item(plan, image.index_no),
                 copy_block=_copy_block(copy_output, image.index_no),
-                prompt_item=_prompt_item(prompt_output, image.index_no),
+                prompt_item=_regenerate_prompt_item(image, prompt_output),
                 product_profile=profile,
                 check_cancel=False,
                 check_timeout=False,
             )
 
-            db.refresh(batch)
-            recount_completed(db, batch)
-            if batch.status != "cancelled":
-                target = summarize_full_status(db, batch)
-                try:
-                    transition_batch(batch, target)
-                except Exception:
-                    batch.status = target
-                batch.finished_at = _now()
-                if target in ("completed", "partially_failed") and image.status == "success":
-                    image.is_history_visible = True
-                elif image.status != "success":
-                    image.is_history_visible = False
-                if target == "partially_failed":
-                    batch.error_message = "部分图片生成失败"
-            else:
-                image.is_history_visible = False
-            batch.stage = "done"
-            db.commit()
+            _finalize_regenerate(db, batch, image, success=ok)
             logger.info(
                 "重试图片 %s 结束，状态 %s，批次状态 %s",
                 new_image_id,
@@ -1019,23 +1047,16 @@ def run_regenerate_pipeline(new_image_id: int) -> None:
             if image is not None:
                 _mark_image_failed(db, image, str(exc))
             batch = db.get(GenerationBatch, image.batch_id if image else batch.id)
-            if batch is not None:
-                db.refresh(batch)
-                recount_completed(db, batch)
-                if batch.status != "cancelled":
-                    target = summarize_full_status(db, batch)
-                    try:
-                        transition_batch(batch, target)
-                    except Exception:
-                        batch.status = target
-                    batch.finished_at = _now()
-                batch.stage = "done"
-                db.commit()
+            if batch is not None and image is not None:
+                _finalize_regenerate(db, batch, image, success=False)
         except BatchTimeout as exc:
             db.rollback()
             image = db.get(GeneratedImage, new_image_id)
             if image is not None:
                 _mark_image_failed(db, image, "批次超时")
+                batch = db.get(GenerationBatch, image.batch_id)
+                if batch is not None:
+                    _finalize_regenerate(db, batch, image, success=False)
             logger.warning("重试图片 %s 超时：%s", new_image_id, exc)
         except Exception as exc:
             logger.exception("重试图片 %s 异常", new_image_id)
@@ -1043,16 +1064,6 @@ def run_regenerate_pipeline(new_image_id: int) -> None:
             image = db.get(GeneratedImage, new_image_id)
             if image is not None:
                 _mark_image_failed(db, image, f"重试失败：{exc}")
-            batch = db.get(GenerationBatch, image.batch_id if image else batch.id)
-            if batch is not None:
-                db.refresh(batch)
-                recount_completed(db, batch)
-                if batch.status != "cancelled":
-                    target = summarize_full_status(db, batch)
-                    try:
-                        transition_batch(batch, target)
-                    except Exception:
-                        batch.status = target
-                    batch.finished_at = _now()
-                batch.stage = "done"
-                db.commit()
+                batch = db.get(GenerationBatch, image.batch_id)
+                if batch is not None:
+                    _finalize_regenerate(db, batch, image, success=False)

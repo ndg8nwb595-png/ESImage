@@ -222,7 +222,8 @@ class DoubaoGateway:
             "watermark": False,
         }
         if reference_images:
-            payload["image"] = [_data_url(data) for data in reference_images[:2]]
+            # 最多 5 张上传图 + 1 张素材；每张压缩到 1024px JPEG，避免请求体过大
+            payload["image"] = [_data_url(data) for data in reference_images[:6]]
 
         data = self._post("/images/generations", payload)
         latency_ms = int((time.perf_counter() - started) * 1000)

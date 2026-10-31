@@ -333,3 +333,14 @@
 - 生图模型：`doubao-seedream-4-0-250828` 无权限；用户随后开通 `doubao-seedream-5-0-pro-260628`。首次调用因 `sequential_image_generation` 参数 400，已改为只发送各版本通用最小参数；再次调用返回 429 `SetLimitExceeded`（账号安全体验模式额度用尽）。
 - 当前阻塞：需用户在方舟控制台调整/关闭「安全体验模式」或调整额度，之后补跑真实全链路 curl；真实通过后再提交开发代码并合并 `main`。
 - 说明：`.env` 中的 Key 使用 `ARK_API_KEY`，代码同时兼容 `DOUBAO_API_KEY`；模型名默认值已同步 `.env.example` 与配置。
+
+### 会话 16 补充：两轴代码审查与修复
+
+- 按流程运行 Standards / Spec 两轴独立审查。Standards 发现 `generation/service.py` 与 `workspace/service.py` 重复 12 个共享校验/序列化函数；已抽出 `app/core/common.py`，两侧改为 import，测试全绿。Spec 发现 4 个功能问题并已修复：
+  1. 单张重试并发只检查 `generating`，请求与 Worker 之间的 `pending` 窗口可并发下单；改为 `pending` + `generating`。
+  2. 取消时在途图片被检查点中止；改为生图开始后允许当前张完成，完成后再检查取消，成功图不进历史。
+  3. 重试只用示例批次的提示词，忽略图片自身保存的修复后提示词；改为优先 `image.prompt`，缺失时回退示例输出。
+  4. 部分失败恢复为 completed 后 `batch.error_message` 未清空；统一在重试汇总时按终态清空/设置。
+  5. 上传图只取前 2 张；改为最多 5 张上传 + 素材，压缩后最多 6 张参考图。
+- 复审后 `TEST_DB_NAME=esimage_generation_test python -m pytest`：**76 passed**；`curl_smoke_generation.sh` 替身模式再次全接口通过。
+- 仍未完成：真实 Seedream 全链路（429 安全体验模式额度）；代码尚未 push/合并 main。

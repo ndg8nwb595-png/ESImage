@@ -1271,3 +1271,18 @@ curl 校验通过项（真实服务 127.0.0.1:8000）：
 
 - 用户在方舟控制台调整/关闭「安全体验模式」后，重跑 `bash scripts/curl_smoke_generation.sh` 完成真实全链路验收。
 - 真实验收通过后提交开发代码、push 分支并合并 `main`。
+
+### 会话 16 复审修复
+
+- 新增 `backend/app/core/common.py`：共享权限、商品名/风格/幂等键、会话归属、时间、URL 与文件名工具。
+- `workspace/service.py`、`generation/service.py`：删除重复实现，改为从 `app/core/common.py` 导入并保留原有导出名。
+- `generation/generation_router.py`：重试并发检查从 `generating` 扩展为 `pending` + `generating`。
+- `generation/pipeline.py`：
+  - 生图开始后的质量/修复/规范/合成检查点不再响应取消，允许在途图片完成；示例批次完成后补一次取消检查。
+  - 重试提示词优先使用 `image.prompt`/`negative_prompt`，示例 `prompt_builder` 只补 whitespace 与 reference。
+  - 新增 `_finalize_regenerate()`，统一重试后的计数、状态、历史可见性与 `error_message`（completed 时清空）。
+  - `_upload_files()` 读取全部上传图（最多 5 张）。
+  - 全套批次 completed 时清空 `error_message`。
+- `generation/agents.py`、`generation/doubao.py`：多模态/生图参考图上限从 2/4 提升到 6。
+- 测试：新增 `test_regenerate_prompt_prefers_image_final_prompt`；补充 pending 重试并发与 completed 后错误清空断言。
+- 验证：`TEST_DB_NAME=esimage_generation_test python -m pytest` **76 passed**；替身 curl 脚本全接口通过。

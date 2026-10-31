@@ -145,7 +145,7 @@ def _messages(
         user_content: Any = user_text
     else:
         user_content = [{"type": "text", "text": user_text}]
-        for data in images[:4]:
+        for data in images[:6]:
             user_content.append(
                 {"type": "image_url", "image_url": {"url": image_data_url(data)}}
             )

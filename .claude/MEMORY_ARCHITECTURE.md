@@ -390,3 +390,13 @@
 - **已注意的兼容取舍**：宽高校验改为 512~2048 且 8 的倍数，但超过 4096 仍返回既有 10004，避免破坏 2 号 demo 的错误码断言；其余越界返回 10003。现有测试全部保留并通过。
 - **测试**：生成链路统一用 `FakeGateway`；故障注入 `GENERATION_FAULT_MODE`（core/image/quality/platform/moderation/timeout）仅 `APP_ENV=test` 生效；测试退避缩放为 0。
 - **已知外部阻塞**：Seedream 5.0 Pro 已开通但账号「安全体验模式」额度用尽（429 SetLimitExceeded），真实全链路验收待用户调整额度。
+
+### 4 号复审后的实现调整（2026-10-31）
+
+- **共享工具落点**：`app/core/common.py` 承载 workspace 与 generation 共用的权限、校验、时间、URL、文件名函数；两个模块只 import，不再各写一份。
+- **重试并发口径**：`pending` 与 `generating` 都算“重试进行中”。新图先 pending 落库，后台再置 generating，只看 generating 会留下请求/Worker 之间的并发窗口。
+- **取消与在途图**：取消只阻止创建新的图片任务；已经进入生图流程的当前张允许完成后续审核/合成并落库，但 `is_history_visible=false`，批次保持 cancelled。示例批次在图片流程结束后再检查一次取消。
+- **重试提示词**：`generated_images.prompt/negative_prompt` 保存的是最终（可能修复后）提示词；重试优先使用这两列，示例批次的 `prompt_builder` 输出只用于补齐 whitespace、reference_asset_ids 等未落库参数。
+- **批次错误清理**：重试汇总为 completed 时必须把 `batch.error_message` 清空；partially_failed / failed 分别写入对应摘要。
+- **参考图上限**：用户上传图 0~5 张全部参与商品理解与生图；上传图 + 素材合计最多送 6 张参考图，单张压缩到 1024px JPEG。
+- **审查结论**：两轴审查的功能问题已修复；剩余外部阻塞仍是 Seedream 账号额度（429），以及 AGENTS.md 要求的 GitHub issue 尚未创建（本地 tickets 为现状）。

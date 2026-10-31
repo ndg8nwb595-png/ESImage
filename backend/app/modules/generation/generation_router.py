@@ -467,15 +467,17 @@ def regenerate_image(
         if max_attempt is not None and image.attempt_no != int(max_attempt):
             raise ApiError(409, 30005, "当前图片不可重试")
 
-        generating = db.scalar(
+        # 新图先以 pending 落库、后台任务才置 generating；
+        # 两者都要计入，才能覆盖请求与 Worker 之间的并发窗口。
+        active_retry = db.scalar(
             select(func.count())
             .select_from(GeneratedImage)
             .where(
                 GeneratedImage.batch_id == batch.id,
-                GeneratedImage.status == "generating",
+                GeneratedImage.status.in_(("pending", "generating")),
             )
         )
-        if int(generating or 0) > 0:
+        if int(active_retry or 0) > 0:
             raise ApiError(409, 30005, "该批次有重试任务进行中")
 
         new_image = GeneratedImage(

@@ -9,6 +9,7 @@ from PIL import Image
 
 from app.models.workspace import GeneratedImage, GenerationBatch
 from app.modules.generation.composition import build_default_layout, compose_text
+from app.modules.generation.pipeline import _regenerate_prompt_item
 from app.modules.generation.state import (
     IllegalTransition,
     can_transition_batch,
@@ -95,3 +96,28 @@ def test_state_machine_illegal_transitions():
         transition_image(image, "generating")
     transition_image(image, "superseded")
     assert image.status == "superseded"
+
+
+def test_regenerate_prompt_prefers_image_final_prompt():
+    print("[测试] 重试优先沿用图片自身保存的最终（修复后）提示词")
+    image = GeneratedImage(
+        index_no=2,
+        prompt="修复后的提示词",
+        negative_prompt="修复后的负面词",
+    )
+    prompt_output = {
+        "images": [
+            {
+                "index": 2,
+                "prompt": "示例批次的原始提示词",
+                "negative_prompt": "原始负面词",
+                "whitespace": {"top_ratio": 0.18, "bottom_ratio": 0.22},
+                "reference_asset_ids": [4],
+            }
+        ]
+    }
+    item = _regenerate_prompt_item(image, prompt_output)
+    assert item["prompt"] == "修复后的提示词"
+    assert item["negative_prompt"] == "修复后的负面词"
+    assert item["reference_asset_ids"] == [4]
+    assert item["whitespace"]["top_ratio"] == 0.18

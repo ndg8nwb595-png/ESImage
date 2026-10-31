@@ -442,6 +442,7 @@ def test_fault_platform_partial_then_regenerate_to_completed(client):
 
     final = _batch(client, token, full_id)
     assert final["status"] == "completed"
+    assert final["error_message"] is None
     assert final["completed_count"] == 6
     assert len(final["images"]) == 6
     assert all(image["status"] == "success" for image in final["images"])
@@ -565,6 +566,42 @@ def test_regenerate_validation_and_idempotency(client):
     )
     assert busy.status_code == 409
     assert busy.json()["message"] == "该批次有重试任务进行中"
+
+    print("[测试] 步骤 4.1：pending 重试也占用并发名额（请求与 Worker 之间的窗口）")
+    with SessionLocal() as db:
+        row = db.get(GenerationBatch, full_id)
+        row.status = "completed"
+        from app.models import GeneratedImage
+
+        other = db.get(GeneratedImage, target["image_id"])
+        other.status = "success"
+        pending = GeneratedImage(
+            batch_id=full_id,
+            user_id=other.user_id,
+            session_id=other.session_id,
+            image_type="final",
+            image_role="detail",
+            index_no=3,
+            attempt_no=2,
+            status="pending",
+            width=other.width,
+            height=other.height,
+        )
+        db.add(pending)
+        db.commit()
+        pending_id = pending.id
+    busy_pending = client.post(
+        f"/api/v1/images/{target['image_id']}/regenerate",
+        headers=_headers(token),
+        json={"client_request_id": _uid()},
+    )
+    assert busy_pending.status_code == 409
+    assert busy_pending.json()["message"] == "该批次有重试任务进行中"
+    with SessionLocal() as db:
+        from app.models import GeneratedImage
+
+        db.delete(db.get(GeneratedImage, pending_id))
+        db.commit()
 
     print("[测试] 步骤 5：同一 client_request_id 返回同一新图片")
     with SessionLocal() as db:
