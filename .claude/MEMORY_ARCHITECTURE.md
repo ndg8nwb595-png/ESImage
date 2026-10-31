@@ -42,6 +42,7 @@
 - **接口**：`/api/v1`、JWT Bearer、统一 `{code,message,data}`、分页 `{items,total,page,page_size}`、OpenAPI。
 - **文档**：12 份 PRD 存于 `docs/prd/`，命名 `数字-中文名prd.md`；新增后台模块按业务域并入现有文档。
 - **术语表**：仓库根目录 `GLOSSARY.md` 是唯一来源；`AGENTS.md` 的「Domain glossary」小节是同步镜像。新增或修改术语时，先改 `GLOSSARY.md`，再同步 `AGENTS.md`。
+- **本地评审记录**：`docs/reviews/` 已加入 `.gitignore`，不进入仓库与 `main`。
 
 ## 2026-10-31 PRD 评审待裁决项（尚未形成共识，不得当作已定架构）
 

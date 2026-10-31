@@ -25,3 +25,6 @@ Thumbs.db
 
 # IDE
 .idea/
+
+# 本地评审记录，不入库
+docs/reviews/

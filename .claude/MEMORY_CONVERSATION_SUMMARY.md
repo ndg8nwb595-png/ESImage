@@ -46,3 +46,4 @@
 - P0-6 已按方案 B 落地：平台规范规则写入 `platform_rule` 系统提示词，`{{platform_rules}}` 读取，不单独建表。
 - P0-7 已按方案 B 落地：参数与上传图 ID 只存前端 localStorage；聊天请求带 params；新增 `GET /uploads/{id}`；会话不持久化参数。
 - P0-8 已按方案 B 落地：新增 `POST /sessions/messages`；聊天与生成在无 session_id 时由后端事务内创建会话；`client_message_id` 幂等。
+- 重新运行 `setup-matt-pocock-skills`：按模板重写 `docs/agents/*`；`AGENTS.md` 的 Domain docs 标注 single-context；五个 triage 标签校验齐全；`docs/reviews/` 已加入 `.gitignore`。

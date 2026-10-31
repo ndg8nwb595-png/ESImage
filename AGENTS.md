@@ -10,7 +10,7 @@ Issue 与需求文档（spec）以 GitHub issue 形式存放在 `ndg8nwb595-png/
 
 ### Domain docs
 
-单上下文布局：仓库根目录的 `GLOSSARY.md` + `docs/adr/`。详见 `docs/agents/domain.md`。
+单上下文（single-context）布局：仓库根目录的 `GLOSSARY.md` + `docs/adr/`。详见 `docs/agents/domain.md`。
 
 ### Domain glossary
 

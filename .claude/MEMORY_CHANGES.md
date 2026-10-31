@@ -239,3 +239,11 @@
 - `9-后端服务与接口prd.md`：新增首条消息接口 `POST /sessions/messages`（`session_id` 可为空）；`POST /sessions/{id}/messages` 用于已有会话；生成接口 `session_id` 可为空；幂等表补首条消息规则；SSE 说明补 `meta` 返回新会话。
 - `10-数据模型与存储prd.md`：`chat_messages` 补首条消息建会话的 Redis 幂等说明。
 - 未运行代码或测试；未 commit。
+
+### 2026-10-31 会话 3 补充：重新生成 Agent 配置
+
+- `.gitignore` 新增 `docs/reviews/`，本地评审记录不入库。
+- 按 `setup-matt-pocock-skills` 模板重写 `docs/agents/issue-tracker.md`、`triage-labels.md`、`domain.md`。
+- `AGENTS.md` 的 Domain docs 行改为“单上下文（single-context）布局”；`Domain glossary` 小节保留。
+- 用 `gh label list` 校验五个 triage 标签全部存在，无需新建。
+- 未运行代码或测试；未 commit。
