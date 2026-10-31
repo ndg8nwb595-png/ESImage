@@ -40,6 +40,14 @@ class Settings:
         # 演示生成管线每个阶段的停顿秒数，便于前端观察阶段进度
         self.DEMO_PIPELINE_STAGE_DELAY = float(os.getenv("DEMO_PIPELINE_STAGE_DELAY", "0.15"))
 
+        # 7 号管理后台：概览四卡缓存 TTL（秒）与归档读取超时（秒）
+        self.DASHBOARD_CACHE_TTL_SECONDS = int(
+            os.getenv("DASHBOARD_CACHE_TTL_SECONDS", "60")
+        )
+        self.ARCHIVE_READ_TIMEOUT_SECONDS = int(
+            os.getenv("ARCHIVE_READ_TIMEOUT_SECONDS", "60")
+        )
+
         # 3 号 Agent 会话交互：消息超时阈值、上下文轮数与 SSE 心跳间隔
         self.CHAT_MESSAGE_TIMEOUT_SECONDS = int(
             os.getenv("CHAT_MESSAGE_TIMEOUT_SECONDS", "120")

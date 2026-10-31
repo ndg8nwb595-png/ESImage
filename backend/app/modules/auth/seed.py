@@ -17,17 +17,28 @@ PERMISSIONS: list[tuple[str, str, str, str | None, bool, str]] = [
     ("user.history", "历史作品", "menu", "用户端", False, "查看历史作品"),
     ("user.profile", "个人中心", "menu", "用户端", False, "进入个人中心"),
     ("admin.dashboard.view", "管理概览", "menu", "概览", False, "查看管理后台概览"),
+    ("admin.tokens.view", "Token 统计", "menu", "概览", False, "查看 Token 统计"),
+    ("admin.content.view", "内容追溯", "menu", "管理后台", False, "查看用户与生图记录"),
+    ("admin.accounts.view", "用户列表", "menu", "账号与权限", False, "查看用户列表与详情"),
 ]
 
 ROLE_PERMISSIONS: dict[str, list[str]] = {
     "user": ["user.workspace", "user.generate", "user.history", "user.profile"],
-    "admin": ["admin.dashboard.view"],
+    "admin": [
+        "admin.dashboard.view",
+        "admin.tokens.view",
+        "admin.content.view",
+        "admin.accounts.view",
+    ],
     "super_admin": [
         "user.workspace",
         "user.generate",
         "user.history",
         "user.profile",
         "admin.dashboard.view",
+        "admin.tokens.view",
+        "admin.content.view",
+        "admin.accounts.view",
     ],
 }
 
@@ -40,7 +51,9 @@ ROLES: list[tuple[str, str]] = [
 # (用户名, 显示名, 角色码列表)
 DEMO_USERS: list[tuple[str, str, list[str]]] = [
     ("demo_user", "演示用户", ["user"]),
+    ("demo_user2", "演示用户二", ["user"]),
     ("demo_admin", "演示管理员", ["admin"]),
+    ("demo_super", "演示超管", ["super_admin"]),
     ("demo_dual", "双角色演示", ["user", "admin"]),
 ]
 

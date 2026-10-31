@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app import models  # noqa: F401  确保模型已注册
 from app.core.database import Base, SessionLocal, engine
+from app.modules.admin.seed import seed_admin
 from app.modules.auth.seed import seed
 
 
@@ -30,6 +31,7 @@ def main() -> None:
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         seed(db)
+        seed_admin(db)
     print("[种子] 完成。")
 
 

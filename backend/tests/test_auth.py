@@ -101,6 +101,9 @@ def test_dual_role_account_has_both_permission_groups(client):
         "user.history",
         "user.profile",
         "admin.dashboard.view",
+        "admin.tokens.view",
+        "admin.content.view",
+        "admin.accounts.view",
     }
 
 
