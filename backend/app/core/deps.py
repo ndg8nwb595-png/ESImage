@@ -10,6 +10,7 @@ from fastapi import Depends, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.context import user_id_var
 from app.core.database import get_db
 from app.core.response import ApiError
 from app.core.security import decode_access_token
@@ -89,6 +90,9 @@ def get_current_auth(request: Request, db: Session = Depends(get_db)) -> AuthCon
         raise ApiError(401, 20003, "token 无效") from exc
     if token_version != user.token_version:
         raise ApiError(401, 20003, "token 无效")
+
+    # 供 JSON 结构化日志关联用户
+    user_id_var.set(user.id)
 
     return AuthContext(
         user=user,

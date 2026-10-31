@@ -48,8 +48,15 @@
 ## 状态
 
 - [x] 模块目录骨架
-- [ ] 历史列表与分页
-- [ ] 批次详情与图片网格
-- [ ] 缩略图、预览与单张下载（含归档）
-- [ ] 整组 ZIP 与 manifest.csv
-- [ ] 种子夹具与 curl 验收
+- [x] 历史列表与分页
+- [x] 批次详情与图片网格
+- [x] 缩略图、预览与单张下载（含归档）
+- [x] 整组 ZIP 与 manifest.csv
+- [x] 种子夹具与 curl 验收
+
+## 验证
+
+- 后端测试：在 `backend/` 执行 `python -m pytest tests/test_history.py -q`（8 个用例）。
+- 全量回归：`python -m pytest -q`（67 个用例）。
+- curl 验收：`bash scripts/curl_history_smoke.sh`，使用独立数据库
+  `esimage_history_curl` 与 `.curl_tmp/storage_history`，逐项覆盖接口文档 §16。

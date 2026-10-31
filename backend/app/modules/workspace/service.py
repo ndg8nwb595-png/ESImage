@@ -2,16 +2,25 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any
 
 from app.core.config import settings
-from app.core.deps import require_permission  # 重新导出，供 workspace 各子路由复用
+from app.core.deps import (  # 重新导出，供 workspace/history 子路由复用
+    require_any_permission,
+    require_permission,
+)
 from app.core.response import ApiError
-from app.models.workspace import CreativeSession
+from app.models.workspace import CreativeSession, GeneratedImage
+from app.modules.workspace.storage import storage
+
+logger = logging.getLogger("esimage.storage")
 
 MAX_UPLOAD_COUNT = 5
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
@@ -200,7 +209,95 @@ def filename_timestamp(value: datetime | None) -> str:
 
 
 def safe_filename_part(value: str) -> str:
-    """把文件名非法字符替换为下划线。"""
-    invalid = set('\\/:*?"<>|\r\n\t')
-    cleaned = "".join("_" if ch in invalid else ch for ch in value).strip()
+    """把文件名非法字符替换为下划线。
+
+    规则见 5 号接口文档 §8.3：`/ \\ : * ? " < > |`、控制字符（0x00~0x1F）
+    以及结尾的点与空格统一替换为下划线。
+    """
+    invalid = set('\\/:*?"<>|')
+    chars = ["_" if ch in invalid or ord(ch) < 0x20 else ch for ch in value]
+    # 结尾的点与空格逐个替换，避免 Windows 无法保存或截断扩展名
+    position = len(chars) - 1
+    while position >= 0 and chars[position] in (" ", "."):
+        chars[position] = "_"
+        position -= 1
+    cleaned = "".join(chars)
     return cleaned or "未命名商品"
+
+
+def image_download_filename(
+    product_name: str,
+    image_role: str,
+    index_no: int,
+    created_at: datetime | None,
+) -> str:
+    """单张与 ZIP 内图片共用同一命名规则。"""
+    role_label = "主图" if image_role == "main" else "详情图"
+    return (
+        f"{safe_filename_part(product_name)}_{role_label}_"
+        f"{index_no}_{filename_timestamp(created_at)}.png"
+    )
+
+
+def archive_relative_path(image: GeneratedImage) -> str:
+    """归档原件的相对路径；调用方需先确认 archived_at 非空。"""
+    return f"archive/{image.file_path}"
+
+
+def _log_archive_error(image: GeneratedImage, path: str, reason: str) -> None:
+    """记录归档读取错误，不包含 token 等敏感信息。"""
+    logger.error(
+        "归档读取失败 image_id=%s batch_id=%s archive_path=%s reason=%s",
+        image.id,
+        image.batch_id,
+        path,
+        reason,
+    )
+
+
+def read_image_bytes(image: GeneratedImage) -> bytes:
+    """读取生成图原件；归档件从 `archive/{file_path}` 读取并受超时约束。
+
+    - 热数据缺失：404 `30014`「文件不存在」
+    - 归档件缺失/超时/存储异常：404 `30014`「文件归档中，请稍后重试」
+    """
+    if not image.file_path:
+        raise ApiError(404, 30014, "文件不存在")
+
+    if image.archived_at is None:
+        path = storage.path(image.file_path)
+        if not path.is_file():
+            raise ApiError(404, 30014, "文件不存在")
+        try:
+            return path.read_bytes()
+        except OSError as exc:
+            logger.error(
+                "热存储读取失败 image_id=%s batch_id=%s path=%s reason=%s",
+                image.id,
+                image.batch_id,
+                image.file_path,
+                exc,
+            )
+            raise ApiError(500, 50003, "存储服务错误") from exc
+
+    relative_path = archive_relative_path(image)
+    path = storage.path(relative_path)
+    if not path.is_file():
+        _log_archive_error(image, relative_path, "file_missing")
+        raise ApiError(404, 30014, "文件归档中，请稍后重试")
+
+    # 本地文件读取本身没有超时参数，用线程池模拟部署配置的读取超时。
+    # 注意不要用 with 语句：它会在退出时等待线程，导致超时失效。
+    executor = ThreadPoolExecutor(max_workers=1)
+    try:
+        future = executor.submit(path.read_bytes)
+        try:
+            return future.result(timeout=settings.ARCHIVE_READ_TIMEOUT_SECONDS)
+        except FutureTimeoutError:
+            _log_archive_error(image, relative_path, "timeout")
+            raise ApiError(404, 30014, "文件归档中，请稍后重试") from None
+        except OSError as exc:
+            _log_archive_error(image, relative_path, f"storage_error: {exc}")
+            raise ApiError(404, 30014, "文件归档中，请稍后重试") from exc
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)

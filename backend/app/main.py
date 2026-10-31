@@ -11,17 +11,29 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.core.logging import configure_logging
+from app.core.request_id import RequestIDMiddleware
 from app.core.response import ApiError, error_body
 from app.modules.admin.router import router as admin_router
+from app.modules.contract.openapi import customize_openapi
 from app.modules.auth.router import router as auth_router
 from app.modules.chat.router import router as chat_router
 from app.modules.history.router import router as history_router
+from app.modules.ops.router import router as ops_router
 from app.modules.profile.router import router as profile_router
 from app.modules.workspace.router import router as workspace_router
 
 logger = logging.getLogger("esimage")
+configure_logging()
 
-app = FastAPI(title="ESImage API", version="0.1.0")
+app = FastAPI(
+    title="ESImage API",
+    version="0.1.0",
+    # 9 号 §9.1：Swagger UI 与 OpenAPI JSON 位于 /api 前缀下
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
+)
 
 # 本地联调默认走 Vite 代理；同时允许直连开发服务器
 _default_origins = "http://localhost:5173,http://127.0.0.1:5173"
@@ -40,6 +52,13 @@ app.include_router(chat_router, prefix="/api/v1")
 app.include_router(history_router, prefix="/api/v1")
 app.include_router(profile_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
+# ops 路由使用绝对路径（/api/health 与 /api/v1/health），不带前缀
+app.include_router(ops_router)
+# 最后注册，保证 request_id 中间件最外层，所有响应（含异常）都带上 X-Request-ID
+app.add_middleware(RequestIDMiddleware)
+
+# 9 号契约基线：在自动生成的 OpenAPI 上补充 Bearer 鉴权、统一响应/分页、错误码与权限码标注
+customize_openapi(app)
 
 
 @app.exception_handler(ApiError)

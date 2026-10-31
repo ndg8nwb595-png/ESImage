@@ -316,3 +316,18 @@
 | 统计口径 | 完成（用户确认） | 内容表已接入，返回真实统计且 `stats_available=true` |
 | 权限目录 | 完成（用户确认） | 名称、类型、分组按 6 号文档；分组只有用户端/管理后台 |
 | Chrome MCP | 部分完成 | MCP 工具已加载；浏览器 profile 被其他 agent 占用时无法新建页面，改用 OpenAPI + curl 验证 |
+
+## 2026-10-31 会话 17：5 号历史作品后端最小 demo 实现
+
+| 需求 | 状态 | 实现手段 |
+| --- | --- | --- |
+| 分支与骨架 | 完成 | `feat/history-backend-demo`；`4ea5d64` 建 `history/README.md` 骨架，push 后 ff 合并 `main` |
+| 历史列表与分页 | 完成 | `GET /history`：本人 `full`、`completed`/`partially_failed`、final+success+visible；固定 20 条，`page` 非法返回 10001 |
+| 批次详情与网格 | 完成 | `GET /history/{batch_id}`：不存在 404/30004、越权 403/20005、非历史范围 404/30004；图片按序号升序 |
+| 大图预览与单张下载 | 完成 | 复用 `/images/{id}/content`、`/download`；预览/缩略图权限放宽为 `user.history` 或 `user.generate`；下载限 `full + final + success + visible` |
+| 整组 ZIP 与 manifest | 完成 | `GET /batches/{batch_id}/download`，同步流式 ZIP；manifest UTF-8 BOM、中文表头、成功/失败行、失败原因 |
+| 归档读取与降级 | 完成 | `archived_at` 非空读 `archive/{file_path}`；缩略图始终热存；`ARCHIVE_READ_TIMEOUT_SECONDS` 默认 60；缺失/超时 404/30014 并写错误日志 |
+| 种子夹具 | 完成 | `history/seed.py` 幂等写入 21 个历史可见批次 + 示例/失败批次 + demo_dual 其他用户批次；接入 `scripts/seed.py` |
+| 自动化测试 | 完成 | `tests/test_history.py` 8 用例；合并最新 `main` 后全量 `pytest` 93 用例通过 |
+| curl 验收 | 完成 | `scripts/curl_history_smoke.sh`，独立库/存储，覆盖接口文档 §16 全部调用 |
+| 待用户裁决 | 待确认 | 种子计数口径（21 可见 vs 文档“21 completed + partial”）；manifest 宽度/高度分列与 4 号“尺寸”单列差异 |
